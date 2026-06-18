@@ -29,6 +29,10 @@ FlowTrim includes three benchmark profiles:
 - `work-code-readonly`: read-only code-lens analysis for private Work repos. Reports use anonymous repo/file labels plus hashes and aggregate metrics only; raw code, repo names, and local paths must not appear in JSON.
   It selects high-signal files for stress testing, so aggregate delete-list and LOC-delta numbers are not average prevalence estimates.
 
+The Work profile defaults to a `9 x 12` high-signal sample: nine repositories and
+twelve code files per repository. Use smaller limits only for quick local smoke
+checks.
+
 Run:
 
 ```bash
@@ -38,6 +42,28 @@ PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --pro
 ```
 
 Allowed claims are lane-specific: FlowTrim may say it selected a safe lower-token method for a measured lane, or that it correctly chose raw when compression was unsafe, slower, or not cheaper. It must not claim that it globally beats RTK, Ponytail, or Headroom. Headroom is reported as skipped when unavailable, not as a loss. Ponytail-style results are complexity-reduction evidence, not direct token compression unless generated text size is measured separately.
+
+## Proof Test Matrix
+
+The acceptance suite in `tests/test_proof_matrix.py` locks the proof plan:
+
+- noisy command output may count as a token win only when required facts survive,
+- exact evidence, failing traces, line diffs, and unsafe marker-only context must
+  select raw or `insufficient-evidence`,
+- Headroom unavailable is a skipped neutral method,
+- Ponytail-style results are code-complexity evidence, not token savings,
+- Aql vault semantic cases defer to Atlas context economy and keep the verdict
+  `hybrid-only`,
+- Work reports stay anonymous and aggregate-only.
+
+Before publishing any public comparison, add a public/open-source readonly corpus;
+private Work measurements are local evidence only.
+
+Run the proof matrix directly:
+
+```bash
+PYTHONPATH=src python3 -m unittest tests.test_proof_matrix
+```
 
 ## Local Verification
 

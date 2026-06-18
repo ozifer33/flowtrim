@@ -444,8 +444,8 @@ def run_suite(
     *,
     aql_root: str | Path | None = None,
     work_root: str | Path | None = None,
-    repo_limit: int = 6,
-    files_per_repo: int = 8,
+    repo_limit: int = 9,
+    files_per_repo: int = 12,
 ) -> BenchmarkReport:
     if profile == "synthetic-heavy":
         cases = build_synthetic_heavy_suite(fixtures_root)
@@ -471,8 +471,8 @@ def run_suite(
 def build_work_code_readonly_suite(
     work_root: str | Path,
     *,
-    repo_limit: int = 6,
-    files_per_repo: int = 8,
+    repo_limit: int = 9,
+    files_per_repo: int = 12,
 ) -> list[BenchmarkCase]:
     root = Path(work_root)
     if repo_limit < 1 or files_per_repo < 1 or not root.exists():
