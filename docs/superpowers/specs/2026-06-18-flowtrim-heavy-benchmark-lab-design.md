@@ -139,10 +139,17 @@ Pass condition for vault adoption:
 
 ## Acceptance Gates
 
-Every candidate method must pass these gates before it can count as a win:
+Every candidate method must pass the gates for its metric family before it can
+count as a win:
 
-- `candidate.tokens < raw.tokens`.
-- candidate does not lose to the best safe lane method.
+- Token-bearing lanes: `candidate.tokens < raw.tokens`, and the candidate does
+  not lose to the best safe lane method.
+- Code-generation lane: delete-list and complexity metrics improve without
+  requirement loss, test-surface loss, or `must_keep_violation`.
+- Exact-evidence lane: raw refusal is the win condition; smaller compressed
+  candidates must not count as wins.
+- Vault semantic cases: correctly defer to Atlas packet/context economy when
+  semantic routing is safer than compression.
 - preservation passes for paths, URLs, source IDs, errors, explicit
   requirements, and `must_preserve` facts.
 - wall-time stays inside the lane budget.
@@ -228,8 +235,10 @@ Wall-time gates must be deterministic enough to compare methods fairly.
 - `tests/test_benchmark.py`: benchmark gates and lane comparisons.
 - `tests/test_adapters.py`: adapter skip/fail-open behavior.
 - `tests/test_publication.py`: public-release gate and upgrade backlog tests.
-- `skills/flowtrim/scripts/flowtrim_benchmark_suite.py`: CLI wrapper that runs
-  the suite and prints JSON or Markdown.
+- `skills/flowtrim/scripts/flowtrim_benchmark.py`: extend the existing wrapper
+  with a `suite` mode that runs the benchmark lab and prints JSON or Markdown.
+  Add a separate `flowtrim_benchmark_suite.py` only if the implementation plan
+  shows the existing wrapper would become confusing.
 
 ### Report Schema
 
@@ -258,13 +267,34 @@ Example case record:
   "lane": "command-output",
   "fixture": "benchmarks/fixtures/logs/noisy-build-pass.txt",
   "methods": {
-    "raw": {"status": "ok", "tokens": 1200, "wall_time_ms": 0},
-    "rtk": {"status": "ok", "tokens": 520, "wall_time_ms": 180},
+    "raw": {
+      "status": "ok",
+      "tokens": 1200,
+      "wall_time_ms": 0,
+      "timeout": false,
+      "repeat_count": 3
+    },
+    "rtk": {
+      "status": "ok",
+      "tokens": 520,
+      "wall_time_ms": 180,
+      "timeout": false,
+      "repeat_count": 3
+    },
     "headroom": {"status": "skipped", "reason": "not installed"},
     "flowtrim-selected": {"status": "selected", "method": "rtk"}
   },
   "preservation": {"passed": true, "missing": []},
-  "runtime_changes": {"hooks": false, "proxy": false, "config_writes": false},
+  "runtime_changes": {
+    "installs": false,
+    "hooks": false,
+    "proxy": false,
+    "mcp": false,
+    "config_writes": false,
+    "telemetry": false,
+    "stores_raw_output": false,
+    "unapproved_filesystem_writes": false
+  },
   "winner": "rtk",
   "counts_as_claim": true
 }
@@ -319,9 +349,9 @@ Use these decision labels:
 - `not-vault`: FlowTrim loses or creates safety risk versus Atlas context economy.
 - `hybrid-only`: FlowTrim helps command-output or main-work lanes, but Atlas
   packet/context economy remains vault default.
-- `vault-safe`: FlowTrim wins on all required vault read-only case families
-  without changing semantic retrieval, source boundaries, approval gates, or
-  exact-evidence handling.
+- `vault-safe`: FlowTrim wins where token-bearing handling applies, and
+  correctly defers to Atlas packet/context economy where semantic routing is the
+  safe default, across all required vault read-only case families.
 - `insufficient-evidence`: benchmark coverage is too narrow or a required tool is
   skipped.
 
