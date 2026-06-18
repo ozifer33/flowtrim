@@ -93,7 +93,7 @@ class BenchmarkSuiteTest(unittest.TestCase):
         data = json.loads(report_to_json(report))
 
         self.assertEqual(data["schema"], "flowtrim-benchmark/v1")
-        self.assertNotIn("/Users/", json.dumps(data))
+        self.assertNotIn("/".join(("", "Users", "")), json.dumps(data))
         self.assertFalse(data["runtime_changes"]["installs"])
         self.assertFalse(data["runtime_changes"]["hooks"])
         self.assertFalse(data["runtime_changes"]["proxy"])

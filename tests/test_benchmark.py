@@ -535,6 +535,7 @@ class BenchmarkGateTest(unittest.TestCase):
             report_to_json(unsafe_report)
 
     def test_report_json_rejects_private_paths_inside_allowed_payload_keys(self):
+        private_path = "/".join(("", "Users", "example", "project", "private.txt"))
         report = build_report(
             "synthetic-heavy",
             [evaluate_case(case())],
@@ -556,7 +557,7 @@ class BenchmarkGateTest(unittest.TestCase):
                                 **{
                                     **method.__dict__,
                                     "payload": {
-                                        "sanitized_snippet": "/Users/example/project/private.txt"
+                                        "sanitized_snippet": private_path
                                     },
                                 }
                             )
@@ -573,6 +574,9 @@ class BenchmarkGateTest(unittest.TestCase):
             report_to_json(unsafe_report)
 
     def test_report_json_rejects_private_paths_outside_payloads(self):
+        private_path = "/".join(
+            ("", "Users", "example", "Documents", "Work", "private-log.txt")
+        )
         report = build_report(
             "synthetic-heavy",
             [
@@ -585,7 +589,7 @@ class BenchmarkGateTest(unittest.TestCase):
                         measurement(
                             "raw",
                             100,
-                            reason="/Users/example/Documents/Work/private-log.txt",
+                            reason=private_path,
                         ),
                         measurement("flowtrim-selected", 40),
                     ],

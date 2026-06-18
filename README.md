@@ -18,6 +18,23 @@ FlowTrim starts as a local proof of concept. It should not be published, install
 - No RTK hooks, Headroom proxy/wrap, MCP registration, memory, or shell config changes by default.
 - No private logs, secrets, production traces, customer data, `.env` values, or Work repo names in this repo.
 - No token-saving claim counts unless preservation and wall-time gates pass.
+- Generated reports stay local in `benchmarks/reports/` unless a sanitized report is explicitly reviewed for publication.
+
+## Benchmark Lab
+
+FlowTrim includes two benchmark profiles:
+
+- `synthetic-heavy`: public-safe fixtures covering command output, long context, exact evidence, code-generation pressure, and adversarial checks.
+- `aql-vault-readonly`: read-only Aql Atlas decision fixtures. The expected default verdict is `hybrid-only`, because Atlas packet, `llm_brief`, source summaries, and generated indexes remain the semantic vault context economy.
+
+Run:
+
+```bash
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile synthetic-heavy --format json
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
+```
+
+Allowed claims are lane-specific: FlowTrim may say it selected a safe lower-token method for a measured lane, or that it correctly chose raw when compression was unsafe, slower, or not cheaper. It must not claim that it globally beats RTK, Ponytail, or Headroom. Headroom is reported as skipped when unavailable, not as a loss. Ponytail-style results are complexity-reduction evidence, not direct token compression unless generated text size is measured separately.
 
 ## Local Verification
 
@@ -25,9 +42,11 @@ Run:
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
-uv run --no-project --with PyYAML python $HOME/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/flowtrim
+uv run --no-project --with PyYAML python <SKILL_CREATOR_QUICK_VALIDATE> skills/flowtrim
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_orchestrator.py "npm test produced a long build log"
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py "abcd"
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile synthetic-heavy --format json
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
 PYTHONPATH=src python3 - <<'PY'
 from pathlib import Path
 from flowtrim.privacy import scan_text
@@ -48,4 +67,5 @@ Expected:
 - skill validation passes,
 - classifier prints `command-output`,
 - benchmark prints `1`,
+- benchmark suites print privacy-safe JSON,
 - privacy scan prints `[]`.

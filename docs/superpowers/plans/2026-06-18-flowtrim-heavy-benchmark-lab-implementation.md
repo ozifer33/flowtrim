@@ -50,8 +50,8 @@ Run these before completion:
 
 ```bash
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile synthetic-heavy --format json
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root /Users/atichart/Documents/Sandbox/Obsidian/AqlAtlas
-uv run --no-project --with PyYAML python "$HOME/.codex/skills/.system/skill-creator/scripts/quick_validate.py" skills/flowtrim
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
+uv run --no-project --with PyYAML python <SKILL_CREATOR_QUICK_VALIDATE> skills/flowtrim
 python3 - <<'PY'
 from pathlib import Path
 from flowtrim.privacy import scan_text
@@ -329,8 +329,8 @@ Run:
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile synthetic-heavy --format json
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root /Users/atichart/Documents/Sandbox/Obsidian/AqlAtlas
-uv run --no-project --with PyYAML python "$HOME/.codex/skills/.system/skill-creator/scripts/quick_validate.py" skills/flowtrim
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
+uv run --no-project --with PyYAML python <SKILL_CREATOR_QUICK_VALIDATE> skills/flowtrim
 ```
 
 Then run privacy scan over tracked/public files and, if reports are written, over
