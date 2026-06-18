@@ -5,6 +5,7 @@ from pathlib import Path
 from flowtrim.benchmark import (
     _candidate,
     _command_case,
+    _tool_infos,
     build_aql_vault_readonly_suite,
     build_report,
     build_synthetic_heavy_suite,
@@ -48,6 +49,7 @@ class BenchmarkSuiteTest(unittest.TestCase):
         self.assertIn("mutation/missing-path", {case.case_id for case in cases})
         self.assertIn("mutation/slower-candidate", {case.case_id for case in cases})
         self.assertIn("mutation/guard-failure", {case.case_id for case in cases})
+        self.assertIn("long-context/marker-only-unsafe", {case.case_id for case in cases})
 
         report = run_suite("synthetic-heavy", FIXTURES_ROOT)
 
@@ -67,6 +69,39 @@ class BenchmarkSuiteTest(unittest.TestCase):
             )
         )
         self.assertTrue(report.runtime_changes.is_none)
+
+        marker_case = next(
+            case for case in report.cases if case.case_id == "long-context/marker-only-unsafe"
+        )
+        self.assertEqual(marker_case.winner, "insufficient-evidence")
+        self.assertEqual(marker_case.selected_method, "raw")
+
+    def test_rtk_fixture_methods_are_marked_as_fixture_replay(self):
+        report = run_suite("synthetic-heavy", FIXTURES_ROOT)
+        rtk_methods = [
+            method
+            for case in report.cases
+            for method in case.methods
+            if method.method == "rtk"
+        ]
+
+        self.assertTrue(rtk_methods)
+        self.assertTrue(
+            all(method.reason == "fixture replay via injected safe runner" for method in rtk_methods)
+        )
+
+    def test_tool_info_captures_version_for_available_tools(self):
+        infos = _tool_infos(
+            which=lambda name: "/tool/" + name if name == "rtk" else None,
+            version_runner=lambda path: "rtk 1.2.3",
+        )
+
+        rtk = next(tool for tool in infos if tool.name == "rtk")
+        headroom = next(tool for tool in infos if tool.name == "headroom")
+
+        self.assertTrue(rtk.available)
+        self.assertEqual(rtk.version, "rtk 1.2.3")
+        self.assertFalse(headroom.available)
 
     def test_command_case_candidate_preservation_is_method_level(self):
         case = _command_case(

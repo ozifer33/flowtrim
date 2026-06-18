@@ -52,7 +52,13 @@ from pathlib import Path
 from flowtrim.privacy import scan_text
 bad = []
 for path in Path('.').rglob('*'):
-    if path.is_file() and '.git' not in path.parts:
+    if (
+        path.is_file()
+        and '.git' not in path.parts
+        and '__pycache__' not in path.parts
+        and path.suffix != '.pyc'
+        and not ('benchmarks' in path.parts and 'reports' in path.parts)
+    ):
         findings = scan_text(path.read_text(errors='ignore'))
         if findings:
             bad.append((path.as_posix(), findings))

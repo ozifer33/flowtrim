@@ -52,7 +52,9 @@ choose raw when output is short or exact evidence.
 Methods:
 
 - `raw`: unmodified output.
-- `rtk`: real RTK command output when a safe command prefix exists.
+- `rtk`: fixture replay through an injected safe runner by default; live RTK
+  evidence is allowed only for explicit read-only commands with the runtime
+  audit gates enabled.
 - `flowtrim-selected`: FlowTrim selector decision over measured method results.
 
 Required fixtures:
@@ -193,7 +195,7 @@ Privacy is release-blocking, not a later polish item.
 - Do not store raw private command output. Store hashes, token counts, method
   names, and sanitized snippets only when a fixture is public-safe.
 - Fail the benchmark if any fixture, generated report, or promoted example
-  contains `/Users/...`, the active workspace root, `.codex`, `.env`,
+  contains a local home path, the active workspace root, `.codex`, `.env`,
   `Documents/Work`, secret-like assignments, production/customer data, or
   unsanitized Aql raw evidence.
 - Aql vault read-only reports must not copy source bodies or private local paths.
@@ -279,7 +281,8 @@ Example case record:
       "tokens": 520,
       "wall_time_ms": 180,
       "timeout": false,
-      "repeat_count": 3
+      "repeat_count": 3,
+      "reason": "fixture replay via injected safe runner"
     },
     "headroom": {"status": "skipped", "reason": "not installed"},
     "flowtrim-selected": {"status": "selected", "method": "rtk"}

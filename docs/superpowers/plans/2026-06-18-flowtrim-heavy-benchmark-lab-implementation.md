@@ -17,7 +17,7 @@ existing Atlas context economy as the default.
 - Do not enable RTK hooks or transparent shell rewriting.
 - Do not publish or push the repo.
 - Do not store raw private Aql source bodies, Work repo output, secrets, `.env`
-  values, `.codex` paths, or local `/Users/...` paths in tracked files or
+  values, `.codex` paths, or local home paths in tracked files or
   promoted reports.
 - Generate benchmark reports under ignored `benchmarks/reports/` by default.
 - Aql vault checks are read-only and must not modify Aql policy or source files.
@@ -57,7 +57,13 @@ from pathlib import Path
 from flowtrim.privacy import scan_text
 findings = {}
 for path in Path(".").rglob("*"):
-    if ".git" in path.parts or not path.is_file():
+    if (
+        ".git" in path.parts
+        or "__pycache__" in path.parts
+        or not path.is_file()
+        or path.suffix == ".pyc"
+        or ("benchmarks" in path.parts and "reports" in path.parts)
+    ):
         continue
     text = path.read_text(errors="ignore")
     hits = scan_text(text)

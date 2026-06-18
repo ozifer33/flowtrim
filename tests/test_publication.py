@@ -1,6 +1,7 @@
 import unittest
 from dataclasses import replace
 
+from flowtrim.benchmark import ToolInfo
 from flowtrim.benchmark import run_suite
 from flowtrim.publication import (
     ReleaseEvidence,
@@ -59,6 +60,24 @@ class PublicationTest(unittest.TestCase):
             "Add package entry points or document PYTHONPATH=src limitation.",
             readiness.backlog,
         )
+
+    def test_available_tool_without_version_blocks_release_even_if_evidence_claims_ready(self):
+        report = run_suite("synthetic-heavy")
+        report = replace(
+            report,
+            tools=[
+                ToolInfo(name="rtk", available=True, version=None),
+                ToolInfo(name="headroom", available=False, reason="not installed"),
+            ],
+        )
+
+        readiness = assess_release_readiness(
+            report,
+            complete_evidence(tool_versions_captured=True),
+        )
+
+        self.assertFalse(readiness.ready)
+        self.assertIn("available tool version missing: rtk", readiness.blockers)
 
     def test_hybrid_vault_verdict_is_preserved(self):
         report = run_suite("aql-vault-readonly")

@@ -43,6 +43,9 @@ def assess_release_readiness(
     blockers = _evidence_blockers(evidence)
     if not report.runtime_changes.is_none:
         blockers.append("benchmark report recorded runtime changes")
+    for tool in report.tools:
+        if tool.available and not tool.version:
+            blockers.append(f"available tool version missing: {tool.name}")
 
     backlog = list(report.upgrade_backlog)
     if not evidence.package_entrypoint_ready:

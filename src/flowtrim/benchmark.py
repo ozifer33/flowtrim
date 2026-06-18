@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field, replace
@@ -22,7 +21,6 @@ RAW_SHORT_TOKEN_LIMIT = 8
 VAULT_READONLY_WALL_TIME_BUDGET_MS = 15_000
 ATLAS_CONTEXT_METHOD = "atlas-context-economy"
 BASELINE_CODE_METHOD = "baseline-code"
-PRIVATE_HOME_PATH_RE = re.compile(r"/Users/[^/\s]+(?:/|$)")
 SAFE_PAYLOAD_KEYS = frozenset(
     {
         "command",
@@ -239,12 +237,17 @@ def build_synthetic_heavy_suite(
     fixtures_root: str | Path | None = None,
 ) -> list[BenchmarkCase]:
     root = Path(fixtures_root or DEFAULT_FIXTURES_ROOT)
+    noisy_pass = load_fixture("logs/noisy-build-pass.txt", root)
+    noisy_fail = load_fixture("logs/noisy-build-fail.txt", root)
     cases = [
         _command_case(
             "command-output/short-empty",
             "logs/short-empty.txt",
             root,
-            candidates=[_candidate("flowtrim-selected", Lane.COMMAND_OUTPUT, "")],
+            candidates=[
+                _rtk_fixture_candidate("", ""),
+                _candidate("flowtrim-selected", Lane.COMMAND_OUTPUT, ""),
+            ],
             must_preserve=(),
         ),
         _command_case(
@@ -252,10 +255,10 @@ def build_synthetic_heavy_suite(
             "logs/noisy-build-pass.txt",
             root,
             candidates=[
-                _candidate(
-                    "rtk",
-                    Lane.COMMAND_OUTPUT,
+                _rtk_fixture_candidate(
+                    noisy_pass,
                     "src/example.py FEATURE_FLAG_DEMO SUMMARY keep: 2 passed, 0 failed",
+                    must_preserve=("src/example.py", "FEATURE_FLAG_DEMO", "2 passed"),
                 ),
                 _candidate(
                     "flowtrim-selected",
@@ -271,11 +274,14 @@ def build_synthetic_heavy_suite(
             "logs/noisy-build-fail.txt",
             root,
             candidates=[
-                _candidate(
-                    "rtk",
-                    Lane.COMMAND_OUTPUT,
+                _rtk_fixture_candidate(
+                    noisy_fail,
                     "src/worker.py RetryBudgetExceeded src/worker.py::test_retry_policy",
-                    wall_time_ms=16,
+                    must_preserve=(
+                        "src/worker.py",
+                        "RetryBudgetExceeded",
+                        "src/worker.py::test_retry_policy",
+                    ),
                 ),
                 _candidate(
                     "flowtrim-selected",
@@ -322,6 +328,7 @@ def build_synthetic_heavy_suite(
             "REQ-DEMO-001 do not install optional tools tests/test_example.py src/example.py",
             must_preserve=("REQ-DEMO-001", "tests/test_example.py", "src/example.py"),
         ),
+        _marker_only_long_context_case(root),
         _code_generation_case(
             "code-generation/over-abstract-helper",
             "code/over-abstract-helper.txt",
@@ -350,7 +357,7 @@ def build_aql_vault_readonly_suite(
         "vault/short-command",
         "vault/aql-short-command.txt",
         root,
-        candidates=[_candidate("rtk", Lane.COMMAND_OUTPUT, "compressed")],
+        candidates=[_rtk_fixture_candidate("", "compressed")],
         must_preserve=(),
     )
     short_case = _with_runtime_and_payload(short_case, live_runtime, live_payload)
@@ -360,12 +367,11 @@ def build_aql_vault_readonly_suite(
         "vault/aql-rtk-candidate.txt",
         root,
         candidates=[
-            _candidate(
-                "rtk",
-                Lane.COMMAND_OUTPUT,
+            _rtk_fixture_candidate(
+                load_fixture("vault/aql-rtk-candidate.txt", root),
                 load_fixture("vault/aql-rtk-candidate.txt", root)
                 + "\nRTK helper metadata",
-                wall_time_ms=12,
+                must_preserve=("source:demo-vault-rtk-001",),
             )
         ],
         must_preserve=("source:demo-vault-rtk-001",),
@@ -505,6 +511,31 @@ def _long_context_case(
     )
 
 
+def _marker_only_long_context_case(fixtures_root: Path) -> BenchmarkCase:
+    from .adapters import RawAdapter
+
+    text = load_fixture("context/handoff.md", fixtures_root)
+    marker_only = "CCR-MARKER REQ-DEMO-001"
+    return BenchmarkCase(
+        case_id="long-context/marker-only-unsafe",
+        lane=Lane.LONG_CONTEXT,
+        fixture="context/handoff.md",
+        metric_family=MetricFamily.TOKEN_BEARING,
+        methods=[
+            RawAdapter().measure(text, Lane.LONG_CONTEXT),
+            _candidate(
+                "flowtrim-selected",
+                Lane.LONG_CONTEXT,
+                marker_only,
+                guard_passed=False,
+                reason="marker-only candidate missing retrieve path",
+            ),
+        ],
+        preservation=PreservationSummary(True),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
 def _code_generation_case(
     case_id: str,
     fixture: str,
@@ -637,6 +668,30 @@ def _candidate(
     )
 
 
+def _rtk_fixture_candidate(
+    input_text: str,
+    output_text: str,
+    *,
+    must_preserve: tuple[str, ...] = (),
+) -> MethodMeasurement:
+    from .adapters import RTKAdapter
+
+    measured = RTKAdapter(runner=lambda text: output_text).measure(
+        input_text,
+        Lane.COMMAND_OUTPUT,
+        must_preserve=must_preserve,
+    )
+    payload = {
+        **(measured.payload or {}),
+        "sanitized_snippet": output_text,
+    }
+    return replace(
+        measured,
+        reason="fixture replay via injected safe runner",
+        payload=payload,
+    )
+
+
 def _enforce_method_preservation(
     methods: list[MethodMeasurement],
     must_preserve: tuple[str, ...],
@@ -751,19 +806,45 @@ def _safe_hash(text: str) -> str:
     return hash_text(text)
 
 
-def _tool_infos() -> list[ToolInfo]:
+def _tool_infos(
+    *,
+    which: Any = shutil.which,
+    version_runner: Any | None = None,
+) -> list[ToolInfo]:
+    version_runner = version_runner or _tool_version
+    rtk_path = which("rtk")
+    headroom_path = which("headroom")
     return [
         ToolInfo(
             name="rtk",
-            available=shutil.which("rtk") is not None,
-            reason=None if shutil.which("rtk") else "not installed on PATH",
+            available=rtk_path is not None,
+            version=version_runner(rtk_path) if rtk_path else None,
+            reason=None if rtk_path else "not installed on PATH",
         ),
         ToolInfo(
             name="headroom",
-            available=shutil.which("headroom") is not None,
-            reason=None if shutil.which("headroom") else "not installed on PATH",
+            available=headroom_path is not None,
+            version=version_runner(headroom_path) if headroom_path else None,
+            reason=None if headroom_path else "not installed on PATH",
         ),
     ]
+
+
+def _tool_version(path: str) -> str | None:
+    try:
+        result = subprocess.run(
+            [path, "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+            timeout=1,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+    output = (result.stdout or result.stderr or "").strip()
+    return output or None
 
 
 def _evaluate_token_bearing_case(
@@ -1185,10 +1266,10 @@ def _assert_safe_payload(payload: Any) -> None:
             _assert_safe_payload(item)
         return
 
-    if isinstance(payload, str) and (scan_text(payload) or PRIVATE_HOME_PATH_RE.search(payload)):
+    if isinstance(payload, str) and scan_text(payload):
         raise ValueError("unsafe payload value")
 
 
 def _assert_safe_report_text(text: str) -> None:
-    if scan_text(text) or PRIVATE_HOME_PATH_RE.search(text):
+    if scan_text(text):
         raise ValueError("unsafe report text")
