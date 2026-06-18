@@ -1,4 +1,6 @@
 import json
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -9,6 +11,7 @@ from flowtrim.benchmark import (
     build_aql_vault_readonly_suite,
     build_report,
     build_synthetic_heavy_suite,
+    build_work_code_readonly_suite,
     load_fixture,
     report_to_json,
     run_suite,
@@ -18,6 +21,30 @@ from flowtrim.privacy import scan_text
 
 
 FIXTURES_ROOT = Path(__file__).resolve().parents[1] / "benchmarks" / "fixtures"
+
+
+def create_work_repo(work_root: Path, repo_name: str = "repo-a") -> Path:
+    repo = work_root / repo_name
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    source = repo / "src" / "feature.ts"
+    source.parent.mkdir()
+    source.write_text(
+        "\n".join(
+            [
+                "export function veryUniquePrivateLogicName(input: string) {",
+                "  const normalized = input.trim().toLowerCase();",
+                "  const repeated = normalizeSharedValue(normalized);",
+                "  const repeated = normalizeSharedValue(normalized);",
+                "  const repeated = normalizeSharedValue(normalized);",
+                "  return repeated;",
+                "}",
+                "export const wrapper = (value: string) => normalizeSharedValue(value);",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return repo
 
 
 class BenchmarkSuiteTest(unittest.TestCase):
@@ -158,6 +185,48 @@ class BenchmarkSuiteTest(unittest.TestCase):
         data = json.loads(report_to_json(report))
 
         self.assertNotIn(str(Path(__file__).resolve().parents[1]), json.dumps(data))
+
+    def test_work_code_readonly_suite_uses_real_code_without_leaking_it(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_root = Path(tmpdir)
+            create_work_repo(work_root)
+
+            report = run_suite(
+                "work-code-readonly",
+                FIXTURES_ROOT,
+                work_root=work_root,
+                repo_limit=1,
+                files_per_repo=2,
+            )
+            text = report_to_json(report)
+            data = json.loads(text)
+
+        self.assertEqual(data["profile"], "work-code-readonly")
+        self.assertEqual(data["runtime_changes"]["unapproved_filesystem_writes"], False)
+        self.assertGreaterEqual(data["metric_totals"]["code-lens"]["cases"], 1)
+        self.assertGreaterEqual(data["metric_totals"]["code-lens"]["delete_items"], 1)
+        self.assertNotIn(str(work_root), text)
+        self.assertNotIn("veryUniquePrivateLogicName", text)
+        self.assertNotIn("repo-a", text)
+        self.assertNotIn("feature.ts", text)
+        self.assertNotIn("normalizeSharedValue", text)
+        self.assertNotIn("const repeated", text)
+        self.assertIn("work-code/repo-01/file-01", {case["case_id"] for case in data["cases"]})
+
+    def test_work_code_readonly_builder_limits_repos_and_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_root = Path(tmpdir)
+            create_work_repo(work_root, "repo-a")
+            create_work_repo(work_root, "repo-b")
+
+            cases = build_work_code_readonly_suite(
+                work_root,
+                repo_limit=1,
+                files_per_repo=1,
+            )
+
+        self.assertEqual(len(cases), 1)
+        self.assertEqual(cases[0].case_id, "work-code/repo-01/file-01")
 
 
 if __name__ == "__main__":

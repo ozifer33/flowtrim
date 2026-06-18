@@ -17,10 +17,42 @@ from .selector import LANE_WALL_TIME_BUDGET_MS
 
 SCHEMA = "flowtrim-benchmark/v1"
 DEFAULT_FIXTURES_ROOT = Path(__file__).resolve().parents[2] / "benchmarks" / "fixtures"
+DEFAULT_WORK_ROOT = Path.home() / "Documents" / "Work"
 RAW_SHORT_TOKEN_LIMIT = 8
 VAULT_READONLY_WALL_TIME_BUDGET_MS = 15_000
+WORK_CODE_WALL_TIME_BUDGET_MS = 500
 ATLAS_CONTEXT_METHOD = "atlas-context-economy"
 BASELINE_CODE_METHOD = "baseline-code"
+WORK_CODE_EXTENSIONS = frozenset(
+    {
+        ".dart",
+        ".go",
+        ".java",
+        ".js",
+        ".jsx",
+        ".kt",
+        ".php",
+        ".py",
+        ".rb",
+        ".swift",
+        ".ts",
+        ".tsx",
+        ".vue",
+    }
+)
+WORK_CODE_SKIP_DIRS = frozenset(
+    {
+        ".git",
+        ".next",
+        "build",
+        "coverage",
+        "DerivedData",
+        "dist",
+        "node_modules",
+        "Pods",
+        "vendor",
+    }
+)
 SAFE_PAYLOAD_KEYS = frozenset(
     {
         "command",
@@ -411,11 +443,20 @@ def run_suite(
     fixtures_root: str | Path | None = None,
     *,
     aql_root: str | Path | None = None,
+    work_root: str | Path | None = None,
+    repo_limit: int = 6,
+    files_per_repo: int = 8,
 ) -> BenchmarkReport:
     if profile == "synthetic-heavy":
         cases = build_synthetic_heavy_suite(fixtures_root)
     elif profile == "aql-vault-readonly":
         cases = build_aql_vault_readonly_suite(fixtures_root, aql_root)
+    elif profile == "work-code-readonly":
+        cases = build_work_code_readonly_suite(
+            work_root or DEFAULT_WORK_ROOT,
+            repo_limit=repo_limit,
+            files_per_repo=files_per_repo,
+        )
     else:
         raise ValueError(f"unknown benchmark profile: {profile}")
 
@@ -425,6 +466,40 @@ def run_suite(
         _tool_infos(),
         list(DEFAULT_UPGRADE_BACKLOG),
     )
+
+
+def build_work_code_readonly_suite(
+    work_root: str | Path,
+    *,
+    repo_limit: int = 6,
+    files_per_repo: int = 8,
+) -> list[BenchmarkCase]:
+    root = Path(work_root)
+    if repo_limit < 1 or files_per_repo < 1 or not root.exists():
+        return []
+
+    repo_roots = _rank_work_repos(root)[:repo_limit]
+    cases: list[BenchmarkCase] = []
+    for repo_index, repo_root in enumerate(repo_roots, start=1):
+        repo_label = f"repo-{repo_index:02d}"
+        pre_status = _run_readonly_git_status(repo_root)
+        files = _select_work_code_files(repo_root, files_per_repo)
+        post_status = _run_readonly_git_status(repo_root)
+        runtime_changes = RuntimeChanges(
+            unapproved_filesystem_writes=pre_status != post_status
+        )
+
+        for file_index, file_path in enumerate(files, start=1):
+            file_label = f"file-{file_index:02d}"
+            cases.append(
+                _work_code_case(
+                    repo_label,
+                    file_label,
+                    file_path,
+                    runtime_changes,
+                )
+            )
+    return cases
 
 
 def _command_case(
@@ -555,6 +630,185 @@ def _code_generation_case(
         preservation=PreservationSummary(True),
         runtime_changes=RuntimeChanges(),
     )
+
+
+def _work_code_case(
+    repo_label: str,
+    file_label: str,
+    file_path: Path,
+    runtime_changes: RuntimeChanges,
+) -> BenchmarkCase:
+    from .adapters import RawAdapter, hash_text
+
+    text = file_path.read_text(encoding="utf-8", errors="ignore")
+    raw = RawAdapter().measure(text, Lane.CODE_GENERATION)
+    raw = replace(raw, payload={"content_hash": hash_text(text)})
+    baseline = replace(raw, method=BASELINE_CODE_METHOD)
+    lens = _work_code_lens_measurement(text)
+    return BenchmarkCase(
+        case_id=f"work-code/{repo_label}/{file_label}",
+        lane=Lane.CODE_GENERATION,
+        fixture=f"work-code/{repo_label}/{file_label}",
+        metric_family=MetricFamily.CODE_LENS,
+        methods=[raw, baseline, lens],
+        preservation=PreservationSummary(True),
+        runtime_changes=runtime_changes,
+    )
+
+
+def _work_code_lens_measurement(text: str) -> MethodMeasurement:
+    from .adapters import hash_text
+
+    items = _work_code_delete_items(text)
+    payload = {
+        "content_hash": hash_text(text),
+        "delete_items": items,
+        "generated_loc_delta": sum(item["estimated_loc_delta"] for item in items),
+        "duplicate_abstractions": sum(
+            1 for item in items if "duplicate" in item["rationale"]
+        ),
+        "requirements_preserved": True,
+        "test_surface_preserved": True,
+        "must_keep_violation": False,
+    }
+    has_signal = bool(items)
+    return MethodMeasurement(
+        method="ponytail-lens",
+        status=BenchmarkStatus.OK,
+        tokens=estimate_tokens(json.dumps(payload, sort_keys=True)),
+        wall_time_ms=0,
+        timeout=False,
+        repeat_count=1,
+        guard_passed=has_signal,
+        reason="sanitized static work-code analysis" if has_signal else "no deterministic code reduction signal",
+        payload=payload,
+    )
+
+
+def _work_code_delete_items(text: str) -> list[dict[str, Any]]:
+    normalized_lines = [_normalize_code_line(line) for line in text.splitlines()]
+    meaningful_lines = [line for line in normalized_lines if _meaningful_code_line(line)]
+    counts: dict[str, int] = {}
+    for line in meaningful_lines:
+        counts[line] = counts.get(line, 0) + 1
+
+    items: list[dict[str, Any]] = []
+    duplicate_clusters = [
+        (line, count)
+        for line, count in counts.items()
+        if count >= 3 and len(line) >= 18
+    ]
+    duplicate_clusters.sort(key=lambda item: (-item[1], item[0]))
+    for index, (_, count) in enumerate(duplicate_clusters[:3], start=1):
+        items.append(
+            {
+                "item": f"duplicate-code-cluster-{index:02d}",
+                "severity": "should-delete",
+                "rationale": "duplicate line cluster detected in work code",
+                "estimated_loc_delta": -min(count - 1, 12),
+                "requirement_affected": "none",
+                "test_surface_affected": "none",
+                "must_keep_violation": False,
+            }
+        )
+
+    wrapper_count = sum(1 for line in meaningful_lines if _looks_like_wrapper_line(line))
+    if wrapper_count:
+        items.append(
+            {
+                "item": "wrapper-like-forwarding-pattern",
+                "severity": "watch",
+                "rationale": "wrapper or forwarding pattern detected in work code",
+                "estimated_loc_delta": -min(wrapper_count, 8),
+                "requirement_affected": "none",
+                "test_surface_affected": "none",
+                "must_keep_violation": False,
+            }
+        )
+
+    return items
+
+
+def _normalize_code_line(line: str) -> str:
+    return " ".join(line.strip().split())
+
+
+def _meaningful_code_line(line: str) -> bool:
+    if len(line) < 12:
+        return False
+    if not any(character.isalpha() for character in line):
+        return False
+    stripped = line.strip("{}[]();, ")
+    if not stripped:
+        return False
+    if line.startswith(("//", "#", "*")):
+        return False
+    return True
+
+
+def _looks_like_wrapper_line(line: str) -> bool:
+    lowered = line.lower()
+    return (
+        ("=>" in lowered and "(" in lowered and ")" in lowered)
+        or lowered.startswith("return await ")
+        or ("return " in lowered and lowered.count("(") >= 2)
+    )
+
+
+def _rank_work_repos(work_root: Path) -> list[Path]:
+    repos = [git_dir.parent for git_dir in sorted(work_root.glob("*/.git"))]
+    return sorted(
+        repos,
+        key=lambda repo: (_count_code_files(repo), repo.name),
+        reverse=True,
+    )
+
+
+def _count_code_files(repo_root: Path) -> int:
+    return sum(1 for path in _iter_work_code_files(repo_root))
+
+
+def _select_work_code_files(repo_root: Path, limit: int) -> list[Path]:
+    scored = []
+    for path in _iter_work_code_files(repo_root):
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        score = _work_code_score(text)
+        scored.append((score, path.stat().st_size, path.as_posix(), path))
+    scored.sort(reverse=True)
+    return [path for _, _, _, path in scored[:limit]]
+
+
+def _iter_work_code_files(repo_root: Path) -> Any:
+    for path in repo_root.rglob("*"):
+        if any(part in WORK_CODE_SKIP_DIRS for part in path.parts):
+            continue
+        if not path.is_file() or path.suffix not in WORK_CODE_EXTENSIONS:
+            continue
+        if _looks_like_test_file(path):
+            continue
+        yield path
+
+
+def _looks_like_test_file(path: Path) -> bool:
+    lowered = path.as_posix().lower()
+    return any(
+        marker in lowered
+        for marker in (
+            ".spec.",
+            ".test.",
+            "__tests__",
+            "/test/",
+            "/tests/",
+        )
+    )
+
+
+def _work_code_score(text: str) -> int:
+    items = _work_code_delete_items(text)
+    return sum(abs(item["estimated_loc_delta"]) for item in items)
 
 
 def _vault_semantic_case(

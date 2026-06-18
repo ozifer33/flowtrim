@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.test_suite import create_work_repo
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "flowtrim" / "scripts" / "flowtrim_benchmark.py"
@@ -51,6 +53,83 @@ class CliTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn(str(ROOT), result.stdout)
+
+    def test_suite_cli_with_work_root_does_not_expose_root_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_root = Path(tmpdir)
+            create_work_repo(work_root)
+
+            result = run_cli(
+                "suite",
+                "--profile",
+                "work-code-readonly",
+                "--format",
+                "json",
+                "--work-root",
+                str(work_root),
+                "--repo-limit",
+                "1",
+                "--files-per-repo",
+                "1",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["profile"], "work-code-readonly")
+        self.assertNotIn(str(work_root), result.stdout)
+        self.assertNotIn("veryUniquePrivateLogicName", result.stdout)
+        self.assertNotIn("repo-a", result.stdout)
+        self.assertNotIn("feature.ts", result.stdout)
+        self.assertNotIn("normalizeSharedValue", result.stdout)
+
+    def test_suite_cli_work_markdown_omits_repo_file_names_and_source_lines(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_root = Path(tmpdir)
+            create_work_repo(work_root)
+
+            result = run_cli(
+                "suite",
+                "--profile",
+                "work-code-readonly",
+                "--format",
+                "markdown",
+                "--work-root",
+                str(work_root),
+                "--repo-limit",
+                "1",
+                "--files-per-repo",
+                "1",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("high-signal files", result.stdout)
+        self.assertNotIn(str(work_root), result.stdout)
+        self.assertNotIn("repo-a", result.stdout)
+        self.assertNotIn("feature.ts", result.stdout)
+        self.assertNotIn("normalizeSharedValue", result.stdout)
+
+    def test_suite_cli_work_write_report_rejects_target_under_work_root(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_root = Path(tmpdir)
+            create_work_repo(work_root)
+            reports_dir = work_root / "reports"
+
+            result = run_cli(
+                "suite",
+                "--profile",
+                "work-code-readonly",
+                "--format",
+                "json",
+                "--work-root",
+                str(work_root),
+                "--reports-dir",
+                str(reports_dir),
+                "--write-report",
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("reports-dir must not be inside work-root", result.stderr)
+        self.assertFalse(reports_dir.exists())
 
     def test_suite_markdown_mode_omits_raw_private_output(self):
         result = run_cli("suite", "--profile", "aql-vault-readonly", "--format", "markdown")

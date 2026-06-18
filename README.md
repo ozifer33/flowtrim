@@ -22,16 +22,19 @@ FlowTrim starts as a local proof of concept. It should not be published, install
 
 ## Benchmark Lab
 
-FlowTrim includes two benchmark profiles:
+FlowTrim includes three benchmark profiles:
 
 - `synthetic-heavy`: public-safe fixtures covering command output, long context, exact evidence, code-generation pressure, and adversarial checks.
 - `aql-vault-readonly`: read-only Aql Atlas decision fixtures. The expected default verdict is `hybrid-only`, because Atlas packet, `llm_brief`, source summaries, and generated indexes remain the semantic vault context economy.
+- `work-code-readonly`: read-only code-lens analysis for private Work repos. Reports use anonymous repo/file labels plus hashes and aggregate metrics only; raw code, repo names, and local paths must not appear in JSON.
+  It selects high-signal files for stress testing, so aggregate delete-list and LOC-delta numbers are not average prevalence estimates.
 
 Run:
 
 ```bash
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile synthetic-heavy --format json
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
 ```
 
 Allowed claims are lane-specific: FlowTrim may say it selected a safe lower-token method for a measured lane, or that it correctly chose raw when compression was unsafe, slower, or not cheaper. It must not claim that it globally beats RTK, Ponytail, or Headroom. Headroom is reported as skipped when unavailable, not as a loss. Ponytail-style results are complexity-reduction evidence, not direct token compression unless generated text size is measured separately.
@@ -47,6 +50,7 @@ PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_orchestrator.py "npm tes
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py "abcd"
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile synthetic-heavy --format json
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
 PYTHONPATH=src python3 - <<'PY'
 from pathlib import Path
 from flowtrim.privacy import scan_text
