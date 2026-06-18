@@ -1,0 +1,16 @@
+BUILD START demo-web
+src/example.py::test_user_flow PASSED
+src/example.py::test_billing_summary PASSED
+WARN keep: src/example.py uses FEATURE_FLAG_DEMO
+WARN keep: src/example.py uses FEATURE_FLAG_DEMO
+INFO noise: bundler chunk 001 completed
+INFO noise: bundler chunk 002 completed
+INFO noise: bundler chunk 003 completed
+INFO noise: bundler chunk 004 completed
+INFO noise: bundler chunk 005 completed
+INFO noise: bundler chunk 006 completed
+INFO noise: bundler chunk 007 completed
+INFO noise: bundler chunk 008 completed
+INFO noise: bundler chunk 009 completed
+INFO noise: bundler chunk 010 completed
+SUMMARY keep: 2 passed, 0 failed, artifact demo-build

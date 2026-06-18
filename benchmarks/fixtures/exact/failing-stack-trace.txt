@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "src/example.py", line 17, in run
+    raise RuntimeError("DEMO_FAILURE")
+RuntimeError: DEMO_FAILURE
+pytest summary: tests/test_example.py::test_failure FAILED

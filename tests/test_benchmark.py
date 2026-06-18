@@ -165,6 +165,21 @@ class BenchmarkGateTest(unittest.TestCase):
         self.assertEqual(report.metric_totals["token-bearing"]["tokens_saved"], 0)
         self.assertEqual(report.metric_totals["token-bearing"]["insufficient_evidence"], 1)
 
+    def test_smaller_over_budget_candidate_selects_raw_without_claim(self):
+        evaluated = evaluate_case(
+            case(
+                methods=[
+                    measurement("raw", 100),
+                    measurement("flowtrim-selected", 10, wall_time_ms=999),
+                ]
+            )
+        )
+
+        self.assertEqual(evaluated.selected_method, "raw")
+        self.assertEqual(evaluated.winner, "raw")
+        self.assertEqual(evaluated.decision_reason, "raw-over-wall-time-budget")
+        self.assertFalse(evaluated.counts_as_claim)
+
     def test_invalid_raw_baseline_cannot_produce_a_win_or_refusal(self):
         for lane, metric_family in (
             (Lane.COMMAND_OUTPUT, MetricFamily.TOKEN_BEARING),
@@ -556,6 +571,34 @@ class BenchmarkGateTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "unsafe payload value"):
             report_to_json(unsafe_report)
+
+    def test_report_json_rejects_private_paths_outside_payloads(self):
+        report = build_report(
+            "synthetic-heavy",
+            [
+                BenchmarkCase(
+                    case_id="private-reason",
+                    lane=Lane.COMMAND_OUTPUT,
+                    fixture="inline.txt",
+                    metric_family=MetricFamily.TOKEN_BEARING,
+                    methods=[
+                        measurement(
+                            "raw",
+                            100,
+                            reason="/Users/example/Documents/Work/private-log.txt",
+                        ),
+                        measurement("flowtrim-selected", 40),
+                    ],
+                    preservation=PreservationSummary(True),
+                    runtime_changes=RuntimeChanges(),
+                )
+            ],
+            [],
+            [],
+        )
+
+        with self.assertRaisesRegex(ValueError, "unsafe report text"):
+            report_to_json(report)
 
     def test_report_json_contains_required_top_level_sections(self):
         report = build_report(

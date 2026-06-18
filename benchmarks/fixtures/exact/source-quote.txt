@@ -1,0 +1,5 @@
+Exact source quote fixture.
+Quote ID: quote-demo-001
+Required quote: "The adapter must never hide exact evidence."
+Source: source:demo-quote-001
+Line: docs/example.md:14

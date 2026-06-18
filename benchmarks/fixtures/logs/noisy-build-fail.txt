@@ -1,0 +1,15 @@
+BUILD START demo-worker
+src/worker.py::test_retry_policy FAILED
+ERROR keep: RetryBudgetExceeded
+TRACE keep: src/worker.py:42 handle_retry
+INFO noise: dependency cache warmed 001
+INFO noise: dependency cache warmed 002
+INFO noise: dependency cache warmed 003
+INFO noise: dependency cache warmed 004
+INFO noise: dependency cache warmed 005
+INFO noise: dependency cache warmed 006
+INFO noise: dependency cache warmed 007
+INFO noise: dependency cache warmed 008
+INFO noise: dependency cache warmed 009
+INFO noise: dependency cache warmed 010
+SUMMARY keep: 1 failed, 18 passed, failing test src/worker.py::test_retry_policy

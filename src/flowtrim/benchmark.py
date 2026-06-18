@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import subprocess
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from .metrics import estimate_tokens
 from .models import Lane
 from .privacy import scan_text
 from .selector import LANE_WALL_TIME_BUDGET_MS
 
 
 SCHEMA = "flowtrim-benchmark/v1"
+DEFAULT_FIXTURES_ROOT = Path(__file__).resolve().parents[2] / "benchmarks" / "fixtures"
 RAW_SHORT_TOKEN_LIMIT = 8
 VAULT_READONLY_WALL_TIME_BUDGET_MS = 15_000
 ATLAS_CONTEXT_METHOD = "atlas-context-economy"
@@ -54,6 +59,14 @@ REQUIRED_VAULT_FAMILIES = frozenset(
         "approval-boundary",
     }
 )
+DEFAULT_UPGRADE_BACKLOG = [
+    "Add package entry points so PYTHONPATH=src is no longer required.",
+    "Add CI for unit tests, skill validation, benchmark smoke, and privacy scan.",
+    "Publish only sanitized synthetic benchmark example reports.",
+    "Capture RTK and Headroom versions when available without storing local paths.",
+    "Document Ponytail lens as complexity reduction, not direct token compression.",
+    "Review license, author metadata, default branch, and public remote checklist.",
+]
 
 
 class BenchmarkStatus(StrEnum):
@@ -210,7 +223,547 @@ def build_report(
 
 def report_to_json(report: BenchmarkReport) -> str:
     _assert_safe_report_payloads(report)
-    return json.dumps(_to_jsonable(report), indent=2, sort_keys=True)
+    text = json.dumps(_to_jsonable(report), indent=2, sort_keys=True)
+    _assert_safe_report_text(text)
+    return text
+
+
+def load_fixture(path: str | Path, fixtures_root: str | Path | None = None) -> str:
+    fixture_path = Path(path)
+    if not fixture_path.is_absolute():
+        fixture_path = Path(fixtures_root or DEFAULT_FIXTURES_ROOT) / fixture_path
+    return fixture_path.read_text(encoding="utf-8")
+
+
+def build_synthetic_heavy_suite(
+    fixtures_root: str | Path | None = None,
+) -> list[BenchmarkCase]:
+    root = Path(fixtures_root or DEFAULT_FIXTURES_ROOT)
+    cases = [
+        _command_case(
+            "command-output/short-empty",
+            "logs/short-empty.txt",
+            root,
+            candidates=[_candidate("flowtrim-selected", Lane.COMMAND_OUTPUT, "")],
+            must_preserve=(),
+        ),
+        _command_case(
+            "command-output/noisy-build-pass",
+            "logs/noisy-build-pass.txt",
+            root,
+            candidates=[
+                _candidate(
+                    "rtk",
+                    Lane.COMMAND_OUTPUT,
+                    "src/example.py FEATURE_FLAG_DEMO SUMMARY keep: 2 passed, 0 failed",
+                ),
+                _candidate(
+                    "flowtrim-selected",
+                    Lane.COMMAND_OUTPUT,
+                    "src/example.py FEATURE_FLAG_DEMO SUMMARY keep: 2 passed, 0 failed",
+                    wall_time_ms=8,
+                ),
+            ],
+            must_preserve=("src/example.py", "FEATURE_FLAG_DEMO", "2 passed"),
+        ),
+        _command_case(
+            "command-output/noisy-build-fail",
+            "logs/noisy-build-fail.txt",
+            root,
+            candidates=[
+                _candidate(
+                    "rtk",
+                    Lane.COMMAND_OUTPUT,
+                    "src/worker.py RetryBudgetExceeded src/worker.py::test_retry_policy",
+                    wall_time_ms=16,
+                ),
+                _candidate(
+                    "flowtrim-selected",
+                    Lane.COMMAND_OUTPUT,
+                    "src/worker.py RetryBudgetExceeded src/worker.py::test_retry_policy",
+                    wall_time_ms=9,
+                ),
+            ],
+            must_preserve=(
+                "src/worker.py",
+                "RetryBudgetExceeded",
+                "src/worker.py::test_retry_policy",
+            ),
+        ),
+        _exact_case(
+            "exact-evidence/source-quote",
+            "exact/source-quote.txt",
+            root,
+            must_preserve=("quote-demo-001", "source:demo-quote-001"),
+        ),
+        _exact_case(
+            "exact-evidence/failing-stack-trace",
+            "exact/failing-stack-trace.txt",
+            root,
+            must_preserve=("src/example.py", "DEMO_FAILURE"),
+        ),
+        _exact_case(
+            "exact-evidence/line-level-diff",
+            "exact/line-level-diff.txt",
+            root,
+            must_preserve=("src/example.py:10", "net_amount"),
+        ),
+        _long_context_case(
+            "long-context/tool-trace",
+            "context/tool-trace.json",
+            root,
+            "trace-demo-001 job-demo-17 source:demo-trace-001 src/example.py DEMO_FAILURE",
+            must_preserve=("trace-demo-001", "job-demo-17", "source:demo-trace-001"),
+        ),
+        _long_context_case(
+            "long-context/handoff",
+            "context/handoff.md",
+            root,
+            "REQ-DEMO-001 do not install optional tools tests/test_example.py src/example.py",
+            must_preserve=("REQ-DEMO-001", "tests/test_example.py", "src/example.py"),
+        ),
+        _code_generation_case(
+            "code-generation/over-abstract-helper",
+            "code/over-abstract-helper.txt",
+            root,
+        ),
+        _code_generation_case(
+            "code-generation/duplicate-conversion-logic",
+            "code/duplicate-conversion-logic.txt",
+            root,
+        ),
+        _mutation_missing_path_case(),
+        _mutation_slower_candidate_case(),
+        _mutation_guard_failure_case(),
+    ]
+    return cases
+
+
+def build_aql_vault_readonly_suite(
+    fixtures_root: str | Path | None = None,
+    aql_root: str | Path | None = None,
+) -> list[BenchmarkCase]:
+    root = Path(fixtures_root or DEFAULT_FIXTURES_ROOT)
+    live_payload, live_runtime = _aql_readonly_audit(aql_root)
+
+    short_case = _command_case(
+        "vault/short-command",
+        "vault/aql-short-command.txt",
+        root,
+        candidates=[_candidate("rtk", Lane.COMMAND_OUTPUT, "compressed")],
+        must_preserve=(),
+    )
+    short_case = _with_runtime_and_payload(short_case, live_runtime, live_payload)
+
+    rtk_case = _command_case(
+        "vault/rtk-candidate",
+        "vault/aql-rtk-candidate.txt",
+        root,
+        candidates=[
+            _candidate(
+                "rtk",
+                Lane.COMMAND_OUTPUT,
+                load_fixture("vault/aql-rtk-candidate.txt", root)
+                + "\nRTK helper metadata",
+                wall_time_ms=12,
+            )
+        ],
+        must_preserve=("source:demo-vault-rtk-001",),
+    )
+
+    semantic_cases = [
+        _vault_semantic_case(
+            "vault/packet-routing",
+            "vault/aql-packet-routing.md",
+            root,
+            must_preserve=("tools/aql.py packet", "source:demo-vault-packet-001"),
+        ),
+        _vault_semantic_case(
+            "vault/index-inventory",
+            "vault/aql-index-inventory.md",
+            root,
+            must_preserve=("retrieval-index.jsonl", "source:demo-vault-index-001"),
+        ),
+        _vault_semantic_case(
+            "vault/source-id-preservation",
+            "vault/aql-source-id-preservation.md",
+            root,
+            must_preserve=("source:demo-vault-source-001", "wiki/topics/demo-topic.md"),
+        ),
+        _vault_semantic_case(
+            "vault/approval-boundary",
+            "vault/aql-approval-boundary.md",
+            root,
+            must_preserve=("ask before deleting", "source:demo-vault-approval-001"),
+        ),
+    ]
+    return [short_case, rtk_case, *semantic_cases]
+
+
+def run_suite(
+    profile: str,
+    fixtures_root: str | Path | None = None,
+    *,
+    aql_root: str | Path | None = None,
+) -> BenchmarkReport:
+    if profile == "synthetic-heavy":
+        cases = build_synthetic_heavy_suite(fixtures_root)
+    elif profile == "aql-vault-readonly":
+        cases = build_aql_vault_readonly_suite(fixtures_root, aql_root)
+    else:
+        raise ValueError(f"unknown benchmark profile: {profile}")
+
+    return build_report(
+        profile,
+        cases,
+        _tool_infos(),
+        list(DEFAULT_UPGRADE_BACKLOG),
+    )
+
+
+def _command_case(
+    case_id: str,
+    fixture: str,
+    fixtures_root: Path,
+    *,
+    candidates: list[MethodMeasurement],
+    must_preserve: tuple[str, ...],
+) -> BenchmarkCase:
+    from .adapters import RawAdapter
+
+    text = load_fixture(fixture, fixtures_root)
+    measured_candidates = _enforce_method_preservation(candidates, must_preserve)
+    return BenchmarkCase(
+        case_id=case_id,
+        lane=Lane.COMMAND_OUTPUT,
+        fixture=fixture,
+        metric_family=MetricFamily.TOKEN_BEARING,
+        methods=[RawAdapter().measure(text, Lane.COMMAND_OUTPUT), *measured_candidates],
+        preservation=_preservation_for(text, text, must_preserve),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
+def _exact_case(
+    case_id: str,
+    fixture: str,
+    fixtures_root: Path,
+    *,
+    must_preserve: tuple[str, ...],
+) -> BenchmarkCase:
+    from .adapters import RawAdapter
+
+    text = load_fixture(fixture, fixtures_root)
+    return BenchmarkCase(
+        case_id=case_id,
+        lane=Lane.EXACT_EVIDENCE,
+        fixture=fixture,
+        metric_family=MetricFamily.REFUSAL_CORRECTNESS,
+        methods=[
+            RawAdapter().measure(text, Lane.EXACT_EVIDENCE),
+            _candidate(
+                "unsafe-summary",
+                Lane.EXACT_EVIDENCE,
+                "compressed exact evidence",
+                guard_passed=False,
+                reason="exact evidence cannot be summarized",
+            ),
+        ],
+        preservation=_preservation_for(text, text, must_preserve),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
+def _long_context_case(
+    case_id: str,
+    fixture: str,
+    fixtures_root: Path,
+    compact_text: str,
+    *,
+    must_preserve: tuple[str, ...],
+) -> BenchmarkCase:
+    from .adapters import HeadroomAdapter, RawAdapter
+
+    text = load_fixture(fixture, fixtures_root)
+    return BenchmarkCase(
+        case_id=case_id,
+        lane=Lane.LONG_CONTEXT,
+        fixture=fixture,
+        metric_family=MetricFamily.TOKEN_BEARING,
+        methods=[
+            RawAdapter().measure(text, Lane.LONG_CONTEXT),
+            HeadroomAdapter(which=lambda executable: None).measure(text, Lane.LONG_CONTEXT),
+            _candidate(
+                "flowtrim-selected",
+                Lane.LONG_CONTEXT,
+                compact_text,
+                guard_passed=all(item in compact_text for item in must_preserve),
+            ),
+        ],
+        preservation=_preservation_for(text, compact_text, must_preserve),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
+def _code_generation_case(
+    case_id: str,
+    fixture: str,
+    fixtures_root: Path,
+) -> BenchmarkCase:
+    from .adapters import PonytailLens, RawAdapter
+
+    text = load_fixture(fixture, fixtures_root)
+    raw = RawAdapter().measure(text, Lane.CODE_GENERATION)
+    baseline = replace(raw, method=BASELINE_CODE_METHOD)
+    return BenchmarkCase(
+        case_id=case_id,
+        lane=Lane.CODE_GENERATION,
+        fixture=fixture,
+        metric_family=MetricFamily.CODE_LENS,
+        methods=[raw, baseline, PonytailLens().analyze(text)],
+        preservation=PreservationSummary(True),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
+def _vault_semantic_case(
+    case_id: str,
+    fixture: str,
+    fixtures_root: Path,
+    *,
+    must_preserve: tuple[str, ...],
+) -> BenchmarkCase:
+    from .adapters import RawAdapter
+
+    text = load_fixture(fixture, fixtures_root)
+    atlas_text = " ".join(must_preserve) + " Atlas packet llm_brief source summary"
+    return BenchmarkCase(
+        case_id=case_id,
+        lane=Lane.LONG_CONTEXT,
+        fixture=fixture,
+        metric_family=MetricFamily.VAULT_SEMANTIC,
+        methods=[
+            RawAdapter().measure(text, Lane.LONG_CONTEXT),
+            _candidate("flowtrim-selected", Lane.LONG_CONTEXT, "compressed vault context"),
+            _candidate(
+                ATLAS_CONTEXT_METHOD,
+                Lane.LONG_CONTEXT,
+                atlas_text,
+                guard_passed=all(item in atlas_text for item in must_preserve),
+            ),
+        ],
+        preservation=_preservation_for(text, atlas_text, must_preserve),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
+def _mutation_missing_path_case() -> BenchmarkCase:
+    raw = _candidate("raw", Lane.COMMAND_OUTPUT, "src/example.py TEST_ERROR raw output")
+    compact = _candidate("flowtrim-selected", Lane.COMMAND_OUTPUT, "TEST_ERROR compact")
+    return BenchmarkCase(
+        case_id="mutation/missing-path",
+        lane=Lane.COMMAND_OUTPUT,
+        fixture="mutation/missing-path",
+        metric_family=MetricFamily.TOKEN_BEARING,
+        methods=[raw, compact],
+        preservation=PreservationSummary(False, ["src/example.py"]),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
+def _mutation_slower_candidate_case() -> BenchmarkCase:
+    raw = _candidate("raw", Lane.COMMAND_OUTPUT, "raw output " * 80)
+    compact = _candidate(
+        "flowtrim-selected",
+        Lane.COMMAND_OUTPUT,
+        "compact",
+        wall_time_ms=999,
+    )
+    return BenchmarkCase(
+        case_id="mutation/slower-candidate",
+        lane=Lane.COMMAND_OUTPUT,
+        fixture="mutation/slower-candidate",
+        metric_family=MetricFamily.TOKEN_BEARING,
+        methods=[raw, compact],
+        preservation=PreservationSummary(True),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
+def _mutation_guard_failure_case() -> BenchmarkCase:
+    raw = _candidate("raw", Lane.COMMAND_OUTPUT, "src/example.py TEST_ERROR " * 20)
+    compact = _candidate(
+        "flowtrim-selected",
+        Lane.COMMAND_OUTPUT,
+        "compact",
+        guard_passed=False,
+        reason="missing required path",
+    )
+    return BenchmarkCase(
+        case_id="mutation/guard-failure",
+        lane=Lane.COMMAND_OUTPUT,
+        fixture="mutation/guard-failure",
+        metric_family=MetricFamily.TOKEN_BEARING,
+        methods=[raw, compact],
+        preservation=PreservationSummary(True),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
+def _candidate(
+    method: str,
+    lane: Lane,
+    text: str,
+    *,
+    status: BenchmarkStatus = BenchmarkStatus.OK,
+    wall_time_ms: int = 10,
+    timeout: bool = False,
+    repeat_count: int = 3,
+    guard_passed: bool = True,
+    reason: str | None = None,
+) -> MethodMeasurement:
+    from .adapters import hash_text
+
+    return MethodMeasurement(
+        method=method,
+        status=status,
+        tokens=estimate_tokens(text),
+        wall_time_ms=wall_time_ms,
+        timeout=timeout,
+        repeat_count=repeat_count,
+        guard_passed=guard_passed and not timeout,
+        reason=reason,
+        payload={"content_hash": hash_text(text), "sanitized_snippet": text},
+    )
+
+
+def _enforce_method_preservation(
+    methods: list[MethodMeasurement],
+    must_preserve: tuple[str, ...],
+) -> list[MethodMeasurement]:
+    if not must_preserve:
+        return methods
+
+    enforced = []
+    for method in methods:
+        snippet = (method.payload or {}).get("sanitized_snippet")
+        if not isinstance(snippet, str):
+            enforced.append(
+                replace(
+                    method,
+                    guard_passed=False,
+                    reason="missing preservation text for candidate",
+                )
+            )
+            continue
+
+        missing = [item for item in must_preserve if item and item not in snippet]
+        if missing:
+            enforced.append(
+                replace(
+                    method,
+                    guard_passed=False,
+                    reason="missing required items: " + ", ".join(missing),
+                )
+            )
+        else:
+            enforced.append(method)
+
+    return enforced
+
+
+def _preservation_for(
+    original: str,
+    candidate: str,
+    must_preserve: tuple[str, ...],
+) -> PreservationSummary:
+    missing = [item for item in must_preserve if item and item not in candidate]
+    return PreservationSummary(not missing, missing)
+
+
+def _with_runtime_and_payload(
+    case: BenchmarkCase,
+    runtime_changes: RuntimeChanges,
+    payload: dict[str, Any] | None,
+) -> BenchmarkCase:
+    if payload is None:
+        return replace(case, runtime_changes=runtime_changes)
+
+    methods = []
+    for method in case.methods:
+        if method.method == "raw":
+            methods.append(
+                replace(method, payload={**(method.payload or {}), **payload})
+            )
+        else:
+            methods.append(method)
+    return replace(case, methods=methods, runtime_changes=runtime_changes)
+
+
+def _aql_readonly_audit(
+    aql_root: str | Path | None,
+) -> tuple[dict[str, Any] | None, RuntimeChanges]:
+    if aql_root is None:
+        return None, RuntimeChanges()
+
+    root = Path(aql_root)
+    if not root.exists():
+        return (
+            {
+                "command": "git status --short",
+                "reason": "aql root unavailable for read-only audit",
+            },
+            RuntimeChanges(),
+        )
+
+    pre_status = _run_readonly_git_status(root)
+    post_status = _run_readonly_git_status(root)
+    payload = {
+        "command": "git status --short",
+        "pre_status_hash": _safe_hash(pre_status),
+        "post_status_hash": _safe_hash(post_status),
+    }
+    runtime_changes = RuntimeChanges(
+        unapproved_filesystem_writes=pre_status != post_status
+    )
+    return payload, runtime_changes
+
+
+def _run_readonly_git_status(root: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "--no-optional-locks", "status", "--short"],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+            timeout=2,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unavailable"
+    return (result.stdout or result.stderr or "").strip()
+
+
+def _safe_hash(text: str) -> str:
+    from .adapters import hash_text
+
+    return hash_text(text)
+
+
+def _tool_infos() -> list[ToolInfo]:
+    return [
+        ToolInfo(
+            name="rtk",
+            available=shutil.which("rtk") is not None,
+            reason=None if shutil.which("rtk") else "not installed on PATH",
+        ),
+        ToolInfo(
+            name="headroom",
+            available=shutil.which("headroom") is not None,
+            reason=None if shutil.which("headroom") else "not installed on PATH",
+        ),
+    ]
 
 
 def _evaluate_token_bearing_case(
@@ -245,7 +798,12 @@ def _evaluate_token_bearing_case(
         return _insufficient(case, raw.method, "timeout")
 
     if _has_smaller_over_budget(case.methods, raw, _wall_time_budget(case)):
-        return _insufficient(case, raw.method, "over-wall-time-budget")
+        return _select_raw(
+            case,
+            raw.method,
+            "raw-over-wall-time-budget",
+            counts_as_claim=False,
+        )
 
     return _select_raw(case, raw.method, "raw-best", counts_as_claim=False)
 
@@ -629,3 +1187,8 @@ def _assert_safe_payload(payload: Any) -> None:
 
     if isinstance(payload, str) and (scan_text(payload) or PRIVATE_HOME_PATH_RE.search(payload)):
         raise ValueError("unsafe payload value")
+
+
+def _assert_safe_report_text(text: str) -> None:
+    if scan_text(text) or PRIVATE_HOME_PATH_RE.search(text):
+        raise ValueError("unsafe report text")
