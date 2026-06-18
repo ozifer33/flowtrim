@@ -26,7 +26,7 @@ Tool posture:
 
 | Profile | Corpus type | Cases | Main result | Claim status |
 | --- | --- | ---: | --- | --- |
-| `synthetic-heavy` | Public-safe synthetic fixtures | 14 | 4 measured token-bearing wins, 521 estimated tokens saved, 3 correct raw refusals, 2 code-lens wins | Publishable as fixture evidence |
+| `synthetic-heavy` | Public-safe synthetic fixtures | 14 | 4 measured token-bearing wins, 528 estimated tokens saved, 3 correct raw refusals, 2 code-lens wins | Publishable as fixture evidence |
 | `aql-vault-readonly` | Read-only vault decision fixtures | 6 | Vault verdict stayed `hybrid-only`; 4 semantic cases deferred to Atlas context economy | Supports keeping Atlas as vault baseline |
 | `work-code-readonly` | Private local anonymous code sample | 84 | 84 code-lens wins, 0 token-bearing claims | Private local evidence only |
 | `work-commit-history-readonly` | Private local anonymous commit history | 49 | 10 token-bearing wins, 36,649 estimated tokens saved, 10 correct raw refusals, 27 code-lens wins | Private local evidence only |
@@ -41,6 +41,11 @@ replace raw output, Atlas context economy, RTK, Ponytail, or Headroom globally.
 The `synthetic-heavy` profile is the public-safe proof corpus. It contains
 fixtures designed to exercise the boundaries where token reduction is useful and
 where it must refuse.
+
+Native command-output comparison is the first implementation stage of the final
+direction. The noisy command fixtures compare raw, RTK fixture replay, and
+`flowtrim-native-command`; wins count only when required facts survive and the
+native packet is smaller within budget.
 
 Command-output cases tested:
 
@@ -89,7 +94,7 @@ loss. It is not a direct token-saving claim.
 
 Synthetic totals:
 
-- `token-bearing`: 9 cases, 4 wins, 521 estimated tokens saved, 3
+- `token-bearing`: 9 cases, 4 wins, 528 estimated tokens saved, 3
   `insufficient-evidence`, 2 skipped methods.
 - `refusal-correctness`: 3 cases, 3 correct refusals.
 - `code-lens`: 2 cases, 2 wins, 6 delete items, 3 duplicate abstractions, 6

@@ -117,6 +117,34 @@ class BenchmarkSuiteTest(unittest.TestCase):
             all(method.reason == "fixture replay via injected safe runner" for method in rtk_methods)
         )
 
+    def test_synthetic_noisy_command_cases_compare_native_against_rtk(self):
+        report = run_suite("synthetic-heavy", FIXTURES_ROOT)
+        noisy_cases = [
+            case
+            for case in report.cases
+            if case.case_id
+            in {
+                "command-output/noisy-build-pass",
+                "command-output/noisy-build-fail",
+            }
+        ]
+
+        self.assertEqual(len(noisy_cases), 2)
+        for case in noisy_cases:
+            with self.subTest(case_id=case.case_id):
+                methods = {method.method: method for method in case.methods}
+                self.assertIn("raw", methods)
+                self.assertIn("rtk", methods)
+                self.assertIn("flowtrim-native-command", methods)
+                self.assertEqual(case.selected_method, "flowtrim-native-command")
+                self.assertLess(
+                    methods["flowtrim-native-command"].tokens,
+                    methods["rtk"].tokens,
+                )
+                self.assertTrue(methods["flowtrim-native-command"].guard_passed)
+                self.assertIn("status", methods["flowtrim-native-command"].payload)
+                self.assertIn("primary_files", methods["flowtrim-native-command"].payload)
+
     def test_tool_info_captures_version_for_available_tools(self):
         infos = _tool_infos(
             which=lambda name: "/tool/" + name if name == "rtk" else None,

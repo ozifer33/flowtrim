@@ -30,6 +30,11 @@ FlowTrim includes four benchmark profiles:
   It selects high-signal files for stress testing, so aggregate delete-list and LOC-delta numbers are not average prevalence estimates.
 - `work-commit-history-readonly`: read-only private Work commit-history analysis. It uses anonymous repo/commit/file aliases and aggregate churn only; repo names, commit messages, file paths, raw diffs, and source bodies must not appear in reports.
 
+FlowTrim's first native challenger is `flowtrim-native-command`, a clean-room
+command-output packetizer. RTK remains an optional baseline/backend: FlowTrim may
+select RTK when it wins safely, but native command output can become selected
+when it preserves required facts and beats both raw and RTK in the measured case.
+
 The Work profile defaults to a `9 x 12` high-signal sample: nine repositories and
 twelve code files per repository. Use smaller limits only for quick local smoke
 checks.

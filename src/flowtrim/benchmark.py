@@ -100,13 +100,18 @@ SAFE_PAYLOAD_KEYS = frozenset(
         "content_hash",
         "delete_items",
         "duplicate_abstractions",
+        "error_labels",
         "estimated_loc_delta",
+        "failing_tests",
         "generated_loc_delta",
         "hash",
         "item",
+        "must_keep",
         "must_keep_violation",
+        "omitted_noise_classes",
         "post_status_hash",
         "pre_status_hash",
+        "primary_files",
         "rationale",
         "reason",
         "requirement_affected",
@@ -114,6 +119,8 @@ SAFE_PAYLOAD_KEYS = frozenset(
         "sanitized_snippet",
         "severity",
         "source_ids",
+        "status",
+        "summary_lines",
         "test_surface_affected",
         "test_surface_preserved",
         "vault_family",
@@ -354,11 +361,9 @@ def build_synthetic_heavy_suite(
                     "src/example.py FEATURE_FLAG_DEMO SUMMARY keep: 2 passed, 0 failed",
                     must_preserve=("src/example.py", "FEATURE_FLAG_DEMO", "2 passed"),
                 ),
-                _candidate(
-                    "flowtrim-selected",
-                    Lane.COMMAND_OUTPUT,
-                    "src/example.py FEATURE_FLAG_DEMO SUMMARY keep: 2 passed, 0 failed",
-                    wall_time_ms=8,
+                _native_command_candidate(
+                    noisy_pass,
+                    must_preserve=("src/example.py", "FEATURE_FLAG_DEMO", "2 passed"),
                 ),
             ],
             must_preserve=("src/example.py", "FEATURE_FLAG_DEMO", "2 passed"),
@@ -377,11 +382,13 @@ def build_synthetic_heavy_suite(
                         "src/worker.py::test_retry_policy",
                     ),
                 ),
-                _candidate(
-                    "flowtrim-selected",
-                    Lane.COMMAND_OUTPUT,
-                    "src/worker.py RetryBudgetExceeded src/worker.py::test_retry_policy",
-                    wall_time_ms=9,
+                _native_command_candidate(
+                    noisy_fail,
+                    must_preserve=(
+                        "src/worker.py",
+                        "RetryBudgetExceeded",
+                        "src/worker.py::test_retry_policy",
+                    ),
                 ),
             ],
             must_preserve=(
@@ -1447,6 +1454,20 @@ def _rtk_fixture_candidate(
         measured,
         reason="fixture replay via injected safe runner",
         payload=payload,
+    )
+
+
+def _native_command_candidate(
+    input_text: str,
+    *,
+    must_preserve: tuple[str, ...],
+) -> MethodMeasurement:
+    from .native_command import FlowTrimNativeCommand
+
+    return FlowTrimNativeCommand().measure(
+        input_text,
+        Lane.COMMAND_OUTPUT,
+        must_preserve=must_preserve,
     )
 
 

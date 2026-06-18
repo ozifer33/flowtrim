@@ -15,8 +15,18 @@ FIXTURES_ROOT = ROOT / "benchmarks" / "fixtures"
 
 SYNTHETIC_EXPECTATIONS = {
     "command-output/short-empty": ("raw", "raw", "raw-short-output", False),
-    "command-output/noisy-build-pass": ("rtk", "rtk", "lower-token-safe", True),
-    "command-output/noisy-build-fail": ("rtk", "rtk", "lower-token-safe", True),
+    "command-output/noisy-build-pass": (
+        "flowtrim-native-command",
+        "flowtrim-native-command",
+        "lower-token-safe",
+        True,
+    ),
+    "command-output/noisy-build-fail": (
+        "flowtrim-native-command",
+        "flowtrim-native-command",
+        "lower-token-safe",
+        True,
+    ),
     "exact-evidence/source-quote": ("raw", "raw", "correct-refusal", False),
     "exact-evidence/failing-stack-trace": ("raw", "raw", "correct-refusal", False),
     "exact-evidence/line-level-diff": ("raw", "raw", "correct-refusal", False),
