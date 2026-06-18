@@ -1,0 +1,2 @@
+summary: 2 passed, 1 warning
+required path: src/app.py

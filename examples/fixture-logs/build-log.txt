@@ -1,0 +1,5 @@
+synthetic build log
+running tests/test_api.py::test_create_user PASSED
+running tests/test_api.py::test_update_user PASSED
+warning: src/app.py imports deprecated helper
+summary: 2 passed, 1 warning
