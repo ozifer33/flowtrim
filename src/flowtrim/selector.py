@@ -7,7 +7,10 @@ def select_best_method(lane: Lane, results: list[MethodResult]) -> MethodResult:
     if not results:
         raise ValueError("results must not be empty")
 
-    raw = next((result for result in results if result.method == "raw"), results[0])
+    raw = next((result for result in results if result.method == "raw" and result.lane == lane), None)
+    if raw is None:
+        raise ValueError(f"select_best_method requires a raw fallback for lane {lane}")
+
     if lane == Lane.EXACT_EVIDENCE:
         return raw
 

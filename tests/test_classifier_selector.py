@@ -52,6 +52,20 @@ class ClassifierSelectorTest(unittest.TestCase):
 
         self.assertEqual(selected, raw)
 
+    def test_exact_evidence_without_same_lane_raw_raises(self):
+        other_raw = result("raw", Lane.COMMAND_OUTPUT, 100)
+        compact = result("summary", Lane.EXACT_EVIDENCE, 25)
+
+        with self.assertRaisesRegex(ValueError, "requires a raw fallback"):
+            select_best_method(Lane.EXACT_EVIDENCE, [other_raw, compact])
+
+    def test_invalid_or_nonmatching_results_without_same_lane_raw_raises(self):
+        invalid = result("summary", Lane.COMMAND_OUTPUT, 25, guard_passed=False)
+        nonmatching = result("summary", Lane.LONG_CONTEXT, 10)
+
+        with self.assertRaisesRegex(ValueError, "requires a raw fallback"):
+            select_best_method(Lane.COMMAND_OUTPUT, [invalid, nonmatching])
+
 
 if __name__ == "__main__":
     unittest.main()
