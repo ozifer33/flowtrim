@@ -23,6 +23,21 @@ class ClassifierSelectorTest(unittest.TestCase):
 
         self.assertIn(Lane.EXACT_EVIDENCE, lanes)
 
+    def test_classify_failed_stack_trace_as_exact_evidence(self):
+        lanes = classify_text("pytest failed with stack trace")
+
+        self.assertIn(Lane.EXACT_EVIDENCE, lanes)
+
+    def test_classify_source_quote_as_exact_evidence(self):
+        lanes = classify_text("preserve this source quote exactly")
+
+        self.assertIn(Lane.EXACT_EVIDENCE, lanes)
+
+    def test_classify_short_command_output_as_exact_evidence(self):
+        lanes = classify_text("short command output please")
+
+        self.assertIn(Lane.EXACT_EVIDENCE, lanes)
+
     def test_classify_command_output_request(self):
         lanes = classify_text("npm test produced a long build log")
 
@@ -43,6 +58,22 @@ class ClassifierSelectorTest(unittest.TestCase):
         selected = select_best_method(Lane.COMMAND_OUTPUT, [raw, invalid])
 
         self.assertEqual(selected, raw)
+
+    def test_select_rejects_slow_lower_token_result_and_returns_raw(self):
+        raw = result("raw", Lane.COMMAND_OUTPUT, 100)
+        slow = result("summary", Lane.COMMAND_OUTPUT, 25, wall_time_ms=10_000)
+
+        selected = select_best_method(Lane.COMMAND_OUTPUT, [raw, slow])
+
+        self.assertEqual(selected, raw)
+
+    def test_select_prefers_faster_lower_token_result_over_raw(self):
+        raw = result("raw", Lane.COMMAND_OUTPUT, 100)
+        compact = result("summary", Lane.COMMAND_OUTPUT, 25, wall_time_ms=200)
+
+        selected = select_best_method(Lane.COMMAND_OUTPUT, [raw, compact])
+
+        self.assertEqual(selected, compact)
 
     def test_exact_evidence_always_chooses_raw(self):
         raw = result("raw", Lane.EXACT_EVIDENCE, 100)

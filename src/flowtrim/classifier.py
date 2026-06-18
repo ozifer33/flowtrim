@@ -6,7 +6,21 @@ from .models import Lane
 COMMAND_WORDS = ("test", "build", "lint", "log", "grep", "search", "find", "npm", "pytest")
 CODE_WORDS = ("write code", "refactor", "helper", "component", "abstraction", "function")
 LONG_CONTEXT_WORDS = ("json", "trace", "payload", "handoff", "long context")
-EXACT_WORDS = ("exact", "diff", "failing", "line numbers", "security")
+EXACT_WORDS = (
+    "exact",
+    "diff",
+    "failed",
+    "failure",
+    "failures",
+    "failing",
+    "line numbers",
+    "line-level diff",
+    "line level diff",
+    "security",
+    "short command",
+    "source quote",
+    "stack trace",
+)
 
 
 def classify_text(text: str) -> tuple[Lane, ...]:
