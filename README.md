@@ -18,3 +18,34 @@ FlowTrim starts as a local proof of concept. It should not be published, install
 - No RTK hooks, Headroom proxy/wrap, MCP registration, memory, or shell config changes by default.
 - No private logs, secrets, production traces, customer data, `.env` values, or Work repo names in this repo.
 - No token-saving claim counts unless preservation and wall-time gates pass.
+
+## Local Verification
+
+Run:
+
+```bash
+PYTHONPATH=src python3 -m unittest discover -s tests
+uv run --no-project --with PyYAML python $HOME/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/flowtrim
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_orchestrator.py "npm test produced a long build log"
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py "abcd"
+PYTHONPATH=src python3 - <<'PY'
+from pathlib import Path
+from flowtrim.privacy import scan_text
+bad = []
+for path in Path('.').rglob('*'):
+    if path.is_file() and '.git' not in path.parts:
+        findings = scan_text(path.read_text(errors='ignore'))
+        if findings:
+            bad.append((path.as_posix(), findings))
+print(bad)
+raise SystemExit(1 if bad else 0)
+PY
+```
+
+Expected:
+
+- all tests pass,
+- skill validation passes,
+- classifier prints `command-output`,
+- benchmark prints `1`,
+- privacy scan prints `[]`.
