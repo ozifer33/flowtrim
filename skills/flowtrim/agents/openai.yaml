@@ -1,0 +1,4 @@
+interface:
+  display_name: "FlowTrim"
+  short_description: "Route work-repo flows through safe token-saving lanes."
+  default_prompt: "Use $flowtrim to choose the safest token-saving lane for this work-repo task."
