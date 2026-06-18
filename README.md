@@ -28,6 +28,7 @@ FlowTrim includes three benchmark profiles:
 - `aql-vault-readonly`: read-only Aql Atlas decision fixtures. The expected default verdict is `hybrid-only`, because Atlas packet, `llm_brief`, source summaries, and generated indexes remain the semantic vault context economy.
 - `work-code-readonly`: read-only code-lens analysis for private Work repos. Reports use anonymous repo/file labels plus hashes and aggregate metrics only; raw code, repo names, and local paths must not appear in JSON.
   It selects high-signal files for stress testing, so aggregate delete-list and LOC-delta numbers are not average prevalence estimates.
+- `work-commit-history-readonly`: read-only private Work commit-history analysis. It uses anonymous repo/commit/file aliases and aggregate churn only; repo names, commit messages, file paths, raw diffs, and source bodies must not appear in reports.
 
 The Work profile defaults to a `9 x 12` high-signal sample: nine repositories and
 twelve code files per repository. Use smaller limits only for quick local smoke
@@ -39,6 +40,7 @@ Run:
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile synthetic-heavy --format json
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
 ```
 
 Allowed claims are lane-specific: FlowTrim may say it selected a safe lower-token method for a measured lane, or that it correctly chose raw when compression was unsafe, slower, or not cheaper. It must not claim that it globally beats RTK, Ponytail, or Headroom. Headroom is reported as skipped when unavailable, not as a loss. Ponytail-style results are complexity-reduction evidence, not direct token compression unless generated text size is measured separately.
@@ -59,6 +61,11 @@ The acceptance suite in `tests/test_proof_matrix.py` locks the proof plan:
 Before publishing any public comparison, add a public/open-source readonly corpus;
 private Work measurements are local evidence only.
 
+The private commit-history profile can support only local/private claim language:
+"private local evidence from historical Work commits" and "generated/lock-heavy
+commits are separated as controls." It cannot support public or global benchmark
+claims.
+
 Run the proof matrix directly:
 
 ```bash
@@ -77,6 +84,7 @@ PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py "abcd"
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile synthetic-heavy --format json
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
 PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
 PYTHONPATH=src python3 - <<'PY'
 from pathlib import Path
 from flowtrim.privacy import scan_text

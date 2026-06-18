@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .benchmark import BenchmarkReport, RuntimeChanges
+from .benchmark import BenchmarkReport, RuntimeChanges, WORK_COMMIT_HISTORY_PROFILE
 
 
 FORBIDDEN_CLAIMS = (
@@ -10,6 +10,8 @@ FORBIDDEN_CLAIMS = (
     "Headroom lost to FlowTrim.",
     "Ponytail saved tokens.",
     "FlowTrim is vault-safe.",
+    "FlowTrim is a public benchmark.",
+    "FlowTrim is a global benchmark.",
 )
 
 
@@ -82,6 +84,12 @@ def validate_claim(report: BenchmarkReport, claim: str) -> bool:
         return report.metric_totals["code-lens"]["wins"] > 0
     if "hybrid-only" in normalized:
         return report.vault_verdict == "hybrid-only"
+    if "private local evidence" in normalized and "historical work commits" in normalized:
+        return report.profile == WORK_COMMIT_HISTORY_PROFILE and bool(report.cases)
+    if "generated/lock-heavy commits are separated as controls" in normalized:
+        return report.profile == WORK_COMMIT_HISTORY_PROFILE and any(
+            "/control-" in case.case_id for case in report.cases
+        )
 
     return False
 
@@ -127,12 +135,18 @@ def _allowed_claims(report: BenchmarkReport) -> list[str]:
         claims.append("Vault verdict is hybrid-only; Atlas context economy remains default.")
     if report.vault_verdict == "vault-safe":
         claims.append("Vault-safe is supported only for the measured read-only suite.")
+    if report.profile == WORK_COMMIT_HISTORY_PROFILE and report.cases:
+        claims.append("FlowTrim has private local evidence from historical Work commits.")
+        if any("/control-" in case.case_id for case in report.cases):
+            claims.append("Generated/lock-heavy commits are separated as controls.")
     return claims
 
 
 def _is_forbidden_claim(report: BenchmarkReport, normalized_claim: str) -> bool:
     if "beats rtk" in normalized_claim and "headroom" in normalized_claim and "globally" in normalized_claim:
         return True
+    if "public benchmark" in normalized_claim or "global benchmark" in normalized_claim:
+        return report.profile == WORK_COMMIT_HISTORY_PROFILE
     if "headroom lost" in normalized_claim:
         return True
     if "ponytail saved tokens" in normalized_claim:

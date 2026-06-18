@@ -23,6 +23,9 @@ VAULT_READONLY_WALL_TIME_BUDGET_MS = 15_000
 WORK_CODE_WALL_TIME_BUDGET_MS = 500
 ATLAS_CONTEXT_METHOD = "atlas-context-economy"
 BASELINE_CODE_METHOD = "baseline-code"
+WORK_COMMIT_HISTORY_PROFILE = "work-commit-history-readonly"
+DEFAULT_WORK_HISTORY_COMMIT_LIMIT = 6
+DEFAULT_WORK_HISTORY_FILES_PER_COMMIT = 4
 WORK_CODE_EXTENSIONS = frozenset(
     {
         ".dart",
@@ -40,6 +43,22 @@ WORK_CODE_EXTENSIONS = frozenset(
         ".vue",
     }
 )
+WORK_HISTORY_CODE_EXTENSIONS = frozenset({".dart", ".js", ".jsx", ".ts", ".tsx", ".vue"})
+WORK_HISTORY_CONTROL_EXTENSIONS = frozenset(
+    {
+        ".g.dart",
+        ".freezed.dart",
+        ".json",
+        ".lock",
+        ".pbxproj",
+        ".plist",
+        ".storyboard",
+        ".swiftinterface",
+        ".xcconfig",
+        ".yaml",
+        ".yml",
+    }
+)
 WORK_CODE_SKIP_DIRS = frozenset(
     {
         ".git",
@@ -52,6 +71,28 @@ WORK_CODE_SKIP_DIRS = frozenset(
         "Pods",
         "vendor",
     }
+)
+WORK_HISTORY_SKIP_PARTS = frozenset(
+    {
+        ".git",
+        ".next",
+        "build",
+        "coverage",
+        "DerivedData",
+        "dist",
+        "node_modules",
+        "Pods",
+        "vendor",
+    }
+)
+WORK_HISTORY_SECRET_MARKERS = (
+    "/.env",
+    "/credential",
+    "/credentials/",
+    "/secret",
+    "/secret_keys/",
+    "/secrets/",
+    "/token",
 )
 SAFE_PAYLOAD_KEYS = frozenset(
     {
@@ -197,6 +238,27 @@ class BenchmarkReport:
     metric_totals: dict[str, dict[str, int]]
     vault_verdict: str
     upgrade_backlog: list[str]
+
+
+@dataclass(frozen=True)
+class WorkHistoryFileStat:
+    path: str
+    extension: str
+    added: int
+    deleted: int
+    churn: int
+    category: str
+
+
+@dataclass(frozen=True)
+class WorkHistoryCommit:
+    commit: str
+    date: str
+    files: tuple[WorkHistoryFileStat, ...]
+    total_churn: int
+    code_churn: int
+    control_churn: int
+    bucket: str
 
 
 def evaluate_case(case: BenchmarkCase) -> BenchmarkCase:
@@ -444,8 +506,11 @@ def run_suite(
     *,
     aql_root: str | Path | None = None,
     work_root: str | Path | None = None,
+    work_repos: list[str | Path] | tuple[str | Path, ...] | None = None,
     repo_limit: int = 9,
     files_per_repo: int = 12,
+    commit_limit: int = DEFAULT_WORK_HISTORY_COMMIT_LIMIT,
+    files_per_commit: int = DEFAULT_WORK_HISTORY_FILES_PER_COMMIT,
 ) -> BenchmarkReport:
     if profile == "synthetic-heavy":
         cases = build_synthetic_heavy_suite(fixtures_root)
@@ -457,6 +522,12 @@ def run_suite(
             repo_limit=repo_limit,
             files_per_repo=files_per_repo,
         )
+    elif profile == WORK_COMMIT_HISTORY_PROFILE:
+        cases = build_work_commit_history_readonly_suite(
+            work_repos or (),
+            commit_limit=commit_limit,
+            files_per_commit=files_per_commit,
+        )
     else:
         raise ValueError(f"unknown benchmark profile: {profile}")
 
@@ -466,6 +537,69 @@ def run_suite(
         _tool_infos(),
         list(DEFAULT_UPGRADE_BACKLOG),
     )
+
+
+def build_work_commit_history_readonly_suite(
+    work_repos: list[str | Path] | tuple[str | Path, ...],
+    *,
+    commit_limit: int = DEFAULT_WORK_HISTORY_COMMIT_LIMIT,
+    files_per_commit: int = DEFAULT_WORK_HISTORY_FILES_PER_COMMIT,
+) -> list[BenchmarkCase]:
+    if commit_limit < 1 or files_per_commit < 1:
+        return []
+
+    cases: list[BenchmarkCase] = []
+    for repo_index, repo in enumerate(work_repos, start=1):
+        repo_root = Path(repo)
+        if not repo_root.exists():
+            continue
+
+        repo_label = f"repo-{repo_index:02d}"
+        pre_status = _run_readonly_git_status(repo_root)
+        commits = _select_work_history_commits(repo_root, commit_limit)
+        post_status = _run_readonly_git_status(repo_root)
+        runtime_changes = RuntimeChanges(
+            unapproved_filesystem_writes=bool(pre_status) or pre_status != post_status
+        )
+
+        commit_number = 1
+        for commit in commits:
+            commit_label = f"commit-{commit_number:03d}"
+            commit_number += 1
+            if commit.bucket in ("code-heavy", "command-output-heavy"):
+                cases.append(
+                    _work_history_command_case(repo_label, commit_label, commit, runtime_changes)
+                )
+                cases.append(
+                    _work_history_exact_case(repo_label, commit_label, commit, runtime_changes)
+                )
+                for file_index, stat in enumerate(
+                    _select_work_history_code_files(commit, files_per_commit),
+                    start=1,
+                ):
+                    code_case = _work_history_code_case(
+                        repo_root,
+                        repo_label,
+                        commit_label,
+                        f"code-{file_index:02d}",
+                        commit,
+                        stat,
+                        runtime_changes,
+                    )
+                    if code_case is not None:
+                        cases.append(code_case)
+
+            elif commit.bucket == "control":
+                cases.append(
+                    _work_history_control_case(
+                        repo_label,
+                        commit_label,
+                        commit,
+                        runtime_changes,
+                    )
+                )
+
+    return cases
 
 
 def build_work_code_readonly_suite(
@@ -727,6 +861,376 @@ def _work_code_delete_items(text: str) -> list[dict[str, Any]]:
         )
 
     return items
+
+
+def _select_work_history_commits(
+    repo_root: Path,
+    commit_limit: int,
+) -> list[WorkHistoryCommit]:
+    commits = _work_history_commits(repo_root)
+    code_commits = sorted(
+        (commit for commit in commits if commit.bucket == "code-heavy"),
+        key=lambda commit: (-commit.code_churn, -len(commit.files), commit.commit),
+    )
+    command_commits = sorted(
+        (commit for commit in commits if commit.bucket == "command-output-heavy"),
+        key=lambda commit: (-commit.total_churn, -len(commit.files), commit.commit),
+    )
+    control_commits = sorted(
+        (commit for commit in commits if commit.bucket == "control"),
+        key=lambda commit: (-commit.control_churn, -len(commit.files), commit.commit),
+    )
+
+    selected: list[WorkHistoryCommit] = []
+    seen: set[str] = set()
+
+    def add(commit: WorkHistoryCommit) -> None:
+        if len(selected) >= commit_limit or commit.commit in seen:
+            return
+        selected.append(commit)
+        seen.add(commit.commit)
+
+    for commit in code_commits[: max(commit_limit - 1, 1)]:
+        add(commit)
+    if control_commits:
+        add(control_commits[0])
+    for commit in command_commits:
+        add(commit)
+    for commit in code_commits:
+        add(commit)
+
+    return selected
+
+
+def _work_history_commits(repo_root: Path) -> list[WorkHistoryCommit]:
+    output = _run_git(
+        repo_root,
+        [
+            "log",
+            "--all",
+            "--no-merges",
+            "--date=short",
+            "--pretty=format:@@@%H%x09%ad",
+            "--numstat",
+        ],
+        timeout=60,
+    )
+    commits: list[WorkHistoryCommit] = []
+    commit_hash = ""
+    date = ""
+    files: list[WorkHistoryFileStat] = []
+
+    def flush() -> None:
+        if not commit_hash:
+            return
+        commit = _build_work_history_commit(commit_hash, date, files)
+        if commit is not None:
+            commits.append(commit)
+
+    for line in output.splitlines():
+        if line.startswith("@@@"):
+            flush()
+            parts = line[3:].split("\t", 1)
+            commit_hash = parts[0]
+            date = parts[1] if len(parts) > 1 else ""
+            files = []
+            continue
+        parts = line.split("\t", 2)
+        if len(parts) != 3:
+            continue
+        added, deleted, path = parts
+        if added == "-" or deleted == "-":
+            continue
+        try:
+            stat = _work_history_file_stat(path, int(added), int(deleted))
+        except ValueError:
+            continue
+        if stat is not None:
+            files.append(stat)
+
+    flush()
+    return commits
+
+
+def _build_work_history_commit(
+    commit_hash: str,
+    date: str,
+    files: list[WorkHistoryFileStat],
+) -> WorkHistoryCommit | None:
+    if not files:
+        return None
+
+    total_churn = sum(stat.churn for stat in files)
+    code_churn = sum(stat.churn for stat in files if stat.category == "code")
+    control_churn = sum(stat.churn for stat in files if stat.category == "control")
+    code_files = sum(1 for stat in files if stat.category == "code")
+
+    if control_churn >= max(30, code_churn * 2):
+        bucket = "control"
+    elif code_churn >= 12 and code_files >= 2:
+        bucket = "code-heavy"
+    elif total_churn >= 50 and len(files) >= 4:
+        bucket = "command-output-heavy"
+    else:
+        return None
+
+    return WorkHistoryCommit(
+        commit=commit_hash,
+        date=date,
+        files=tuple(files),
+        total_churn=total_churn,
+        code_churn=code_churn,
+        control_churn=control_churn,
+        bucket=bucket,
+    )
+
+
+def _work_history_file_stat(
+    path: str,
+    added: int,
+    deleted: int,
+) -> WorkHistoryFileStat | None:
+    normalized = path.replace("\\", "/")
+    if _work_history_path_is_private_or_ignored(normalized):
+        return None
+
+    extension = _work_history_extension(normalized)
+    churn = added + deleted
+    if extension in WORK_HISTORY_CODE_EXTENSIONS:
+        category = "code"
+    elif extension in WORK_HISTORY_CONTROL_EXTENSIONS or _work_history_path_is_control(normalized):
+        category = "control"
+    else:
+        category = "other"
+
+    return WorkHistoryFileStat(
+        path=normalized,
+        extension=extension or "[none]",
+        added=added,
+        deleted=deleted,
+        churn=churn,
+        category=category,
+    )
+
+
+def _work_history_path_is_private_or_ignored(path: str) -> bool:
+    lowered = "/" + path.lower().strip("/")
+    if any(part in WORK_HISTORY_SKIP_PARTS for part in lowered.split("/")):
+        return True
+    return any(marker in lowered for marker in WORK_HISTORY_SECRET_MARKERS)
+
+
+def _work_history_path_is_control(path: str) -> bool:
+    lowered = "/" + path.lower().strip("/")
+    return any(
+        marker in lowered
+        for marker in (
+            "/generated",
+            "/ios/",
+            "/android/",
+            "/build.",
+            "/package-lock.",
+            "/pubspec.lock",
+            "/yarn.lock",
+        )
+    )
+
+
+def _work_history_extension(path: str) -> str:
+    lowered = path.lower()
+    for compound in (".freezed.dart", ".g.dart"):
+        if lowered.endswith(compound):
+            return compound
+    return Path(path).suffix.lower()
+
+
+def _select_work_history_code_files(
+    commit: WorkHistoryCommit,
+    limit: int,
+) -> list[WorkHistoryFileStat]:
+    files = [stat for stat in commit.files if stat.category == "code"]
+    files.sort(key=lambda stat: (-stat.churn, stat.extension, stat.path))
+    return files[:limit]
+
+
+def _work_history_command_case(
+    repo_label: str,
+    commit_label: str,
+    commit: WorkHistoryCommit,
+    runtime_changes: RuntimeChanges,
+) -> BenchmarkCase:
+    from .adapters import RawAdapter
+
+    raw_text = _work_history_raw_text(repo_label, commit_label, commit)
+    compact = _work_history_compact_text(repo_label, commit_label, commit)
+    must_preserve = _work_history_must_preserve(repo_label, commit_label, commit)
+    return BenchmarkCase(
+        case_id=f"work-history/{repo_label}/{commit_label}/command-01",
+        lane=Lane.COMMAND_OUTPUT,
+        fixture=f"work-history/{repo_label}/{commit_label}/command-01",
+        metric_family=MetricFamily.TOKEN_BEARING,
+        methods=[
+            RawAdapter().measure(raw_text, Lane.COMMAND_OUTPUT),
+            _rtk_fixture_candidate(raw_text, compact, must_preserve=must_preserve),
+            _candidate(
+                "flowtrim-selected",
+                Lane.COMMAND_OUTPUT,
+                compact,
+                guard_passed=True,
+            ),
+        ],
+        preservation=_preservation_for(raw_text, compact, must_preserve),
+        runtime_changes=runtime_changes,
+    )
+
+
+def _work_history_exact_case(
+    repo_label: str,
+    commit_label: str,
+    commit: WorkHistoryCommit,
+    runtime_changes: RuntimeChanges,
+) -> BenchmarkCase:
+    from .adapters import RawAdapter
+
+    raw_text = _work_history_raw_text(repo_label, commit_label, commit)
+    return BenchmarkCase(
+        case_id=f"work-history/{repo_label}/{commit_label}/exact-01",
+        lane=Lane.EXACT_EVIDENCE,
+        fixture=f"work-history/{repo_label}/{commit_label}/exact-01",
+        metric_family=MetricFamily.REFUSAL_CORRECTNESS,
+        methods=[
+            RawAdapter().measure(raw_text, Lane.EXACT_EVIDENCE),
+            _candidate(
+                "unsafe-summary",
+                Lane.EXACT_EVIDENCE,
+                f"{repo_label} {commit_label} compact private history summary",
+                guard_passed=False,
+                reason="commit-history exact evidence cannot be summarized",
+            ),
+        ],
+        preservation=_preservation_for(
+            raw_text,
+            raw_text,
+            _work_history_must_preserve(repo_label, commit_label, commit),
+        ),
+        runtime_changes=runtime_changes,
+    )
+
+
+def _work_history_code_case(
+    repo_root: Path,
+    repo_label: str,
+    commit_label: str,
+    code_label: str,
+    commit: WorkHistoryCommit,
+    stat: WorkHistoryFileStat,
+    runtime_changes: RuntimeChanges,
+) -> BenchmarkCase | None:
+    from .adapters import RawAdapter
+
+    text = _run_git(repo_root, ["show", f"{commit.commit}:{stat.path}"], timeout=10)
+    if not text.strip():
+        return None
+    raw = RawAdapter().measure(text, Lane.CODE_GENERATION)
+    baseline = replace(raw, method=BASELINE_CODE_METHOD)
+    return BenchmarkCase(
+        case_id=f"work-history/{repo_label}/{commit_label}/{code_label}",
+        lane=Lane.CODE_GENERATION,
+        fixture=f"work-history/{repo_label}/{commit_label}/{code_label}",
+        metric_family=MetricFamily.CODE_LENS,
+        methods=[raw, baseline, _work_code_lens_measurement(text)],
+        preservation=PreservationSummary(True),
+        runtime_changes=runtime_changes,
+    )
+
+
+def _work_history_control_case(
+    repo_label: str,
+    commit_label: str,
+    commit: WorkHistoryCommit,
+    runtime_changes: RuntimeChanges,
+) -> BenchmarkCase:
+    from .adapters import RawAdapter
+
+    raw_text = _work_history_raw_text(repo_label, commit_label, commit)
+    return BenchmarkCase(
+        case_id=f"work-history/{repo_label}/{commit_label}/control-01",
+        lane=Lane.COMMAND_OUTPUT,
+        fixture=f"work-history/{repo_label}/{commit_label}/control-01",
+        metric_family=MetricFamily.TOKEN_BEARING,
+        methods=[RawAdapter().measure(raw_text, Lane.COMMAND_OUTPUT)],
+        preservation=PreservationSummary(True),
+        runtime_changes=runtime_changes,
+    )
+
+
+def _work_history_raw_text(
+    repo_label: str,
+    commit_label: str,
+    commit: WorkHistoryCommit,
+) -> str:
+    header = _work_history_compact_text(repo_label, commit_label, commit)
+    rows = [
+        (
+            f"{commit_label} file-{index:03d} ext:{stat.extension} "
+            f"add:{stat.added} del:{stat.deleted} bucket:{stat.category}"
+        )
+        for index, stat in enumerate(commit.files, start=1)
+    ]
+    return "\n".join([header, *rows])
+
+
+def _work_history_compact_text(
+    repo_label: str,
+    commit_label: str,
+    commit: WorkHistoryCommit,
+) -> str:
+    return (
+        f"{repo_label} {commit_label} bucket:{commit.bucket} "
+        f"files:{len(commit.files)} churn:{commit.total_churn} "
+        f"code:{commit.code_churn} control:{commit.control_churn} "
+        f"top:{_work_history_top_extension(commit)}"
+    )
+
+
+def _work_history_must_preserve(
+    repo_label: str,
+    commit_label: str,
+    commit: WorkHistoryCommit,
+) -> tuple[str, ...]:
+    return (
+        repo_label,
+        commit_label,
+        f"bucket:{commit.bucket}",
+        f"files:{len(commit.files)}",
+        f"churn:{commit.total_churn}",
+        f"top:{_work_history_top_extension(commit)}",
+    )
+
+
+def _work_history_top_extension(commit: WorkHistoryCommit) -> str:
+    churn_by_extension: dict[str, int] = {}
+    for stat in commit.files:
+        churn_by_extension[stat.extension] = churn_by_extension.get(stat.extension, 0) + stat.churn
+    if not churn_by_extension:
+        return "[none]"
+    return max(churn_by_extension.items(), key=lambda item: (item[1], item[0]))[0]
+
+
+def _run_git(repo_root: Path, args: list[str], *, timeout: int) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "--no-optional-locks", *args],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout or ""
 
 
 def _normalize_code_line(line: str) -> str:

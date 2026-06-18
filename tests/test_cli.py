@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from tests.test_suite import create_work_repo
+from tests.test_work_commit_history import create_history_repo
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,6 +82,34 @@ class CliTest(unittest.TestCase):
         self.assertNotIn("repo-a", result.stdout)
         self.assertNotIn("feature.ts", result.stdout)
         self.assertNotIn("normalizeSharedValue", result.stdout)
+
+    def test_suite_cli_with_work_repo_history_does_not_expose_repo_details(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_root = Path(tmpdir)
+            repo = create_history_repo(work_root, "private-ruejai-app", "dart")
+
+            result = run_cli(
+                "suite",
+                "--profile",
+                "work-commit-history-readonly",
+                "--format",
+                "json",
+                "--work-repo",
+                str(repo),
+                "--commit-limit",
+                "4",
+                "--files-per-commit",
+                "1",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["profile"], "work-commit-history-readonly")
+        self.assertIn("work-history/repo-01/commit-001/code-01", result.stdout)
+        self.assertNotIn(str(work_root), result.stdout)
+        self.assertNotIn("private-ruejai-app", result.stdout)
+        self.assertNotIn("private_feature", result.stdout)
+        self.assertNotIn("normalizePrivateFixtureValue", result.stdout)
 
     def test_suite_cli_work_markdown_omits_repo_file_names_and_source_lines(self):
         with tempfile.TemporaryDirectory() as tmpdir:
