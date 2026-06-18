@@ -495,6 +495,8 @@ def _payload_int(method: MethodMeasurement, key: str) -> int:
     if not method.payload:
         return 0
     value = method.payload.get(key, 0)
+    if key == "delete_items" and isinstance(value, list):
+        return len(value)
     return value if isinstance(value, int) else 0
 
 
@@ -506,6 +508,10 @@ def _code_lens_payload_is_safe(method: MethodMeasurement) -> bool:
 def _code_lens_payload_has_violation(payload: Any) -> bool:
     if isinstance(payload, dict):
         if payload.get("must_keep_violation") is True:
+            return True
+        if payload.get("requirement_affected") not in (None, "none"):
+            return True
+        if payload.get("test_surface_affected") not in (None, "none"):
             return True
         if payload.get("requirements_preserved") is False:
             return True

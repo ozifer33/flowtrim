@@ -308,6 +308,45 @@ class BenchmarkGateTest(unittest.TestCase):
 
         self.assertEqual(nested.winner, "insufficient-evidence")
 
+    def test_code_lens_totals_count_delete_item_lists(self):
+        evaluated = evaluate_case(
+            case(
+                lane=Lane.CODE_GENERATION,
+                metric_family=MetricFamily.CODE_LENS,
+                methods=[
+                    measurement("baseline-code", 500),
+                    MethodMeasurement(
+                        method="ponytail-lens",
+                        status=BenchmarkStatus.OK,
+                        tokens=300,
+                        wall_time_ms=20,
+                        timeout=False,
+                        repeat_count=3,
+                        guard_passed=True,
+                        payload={
+                            "delete_items": [
+                                {"item": "duplicate helper"},
+                                {"item": "wrapper"},
+                            ],
+                            "generated_loc_delta": -2,
+                            "duplicate_abstractions": 1,
+                            "requirements_preserved": True,
+                            "test_surface_preserved": True,
+                            "must_keep_violation": False,
+                        },
+                    ),
+                    measurement("raw", 500),
+                ],
+            )
+        )
+
+        report = build_report("synthetic-heavy", [evaluated], [], [])
+
+        self.assertEqual(report.metric_totals["code-lens"]["wins"], 1)
+        self.assertEqual(report.metric_totals["code-lens"]["delete_items"], 2)
+        self.assertEqual(report.metric_totals["code-lens"]["generated_loc_delta"], -2)
+        self.assertEqual(report.metric_totals["code-lens"]["duplicate_abstractions"], 1)
+
     def test_vault_semantic_cases_defer_to_atlas_context_economy(self):
         evaluated = evaluate_case(
             case(
