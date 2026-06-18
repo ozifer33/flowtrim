@@ -22,7 +22,7 @@ FlowTrim starts as a local proof of concept. It should not be published, install
 
 ## Benchmark Lab
 
-FlowTrim includes three benchmark profiles:
+FlowTrim includes four benchmark profiles:
 
 - `synthetic-heavy`: public-safe fixtures covering command output, long context, exact evidence, code-generation pressure, and adversarial checks.
 - `aql-vault-readonly`: read-only Aql Atlas decision fixtures. The expected default verdict is `hybrid-only`, because Atlas packet, `llm_brief`, source summaries, and generated indexes remain the semantic vault context economy.
@@ -65,6 +65,10 @@ The private commit-history profile can support only local/private claim language
 "private local evidence from historical Work commits" and "generated/lock-heavy
 commits are separated as controls." It cannot support public or global benchmark
 claims.
+
+For a detailed, public-safe explanation of the latest proof run, including what
+each profile tests, acceptance gates, result totals, and claim boundaries, see
+`docs/benchmark-results.md`.
 
 Run the proof matrix directly:
 
