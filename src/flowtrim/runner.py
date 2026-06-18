@@ -13,6 +13,9 @@ def can_run_together(first: LaneTask, second: LaneTask) -> bool:
 
 
 def run_parallel(runners: dict[str, Callable[[], MethodResult]]) -> list[MethodResult]:
+    if not runners:
+        return []
+
     with ThreadPoolExecutor(max_workers=len(runners)) as executor:
         futures = [executor.submit(runner) for runner in runners.values()]
         return [future.result() for future in futures]

@@ -48,6 +48,9 @@ class RunnerTest(unittest.TestCase):
 
         self.assertFalse(can_run_together(first, second))
 
+    def test_run_parallel_returns_empty_list_for_empty_runners(self):
+        self.assertEqual(run_parallel({}), [])
+
     def test_run_parallel_returns_results_from_concurrent_runners(self):
         first = result("first")
         second = result("second")
