@@ -134,7 +134,7 @@ Pass condition for vault adoption:
 - FlowTrim must not recommend replacing `tools/aql.py packet`.
 - FlowTrim may recommend selected command-output handling only when measured
   output beats raw and existing Aql policy.
-- If evidence is mixed, verdict must be `hybrid only`: Atlas context economy for
+- If evidence is mixed, verdict must be `hybrid-only`: Atlas context economy for
   semantic retrieval, FlowTrim as a main-work/command-output advisor.
 
 ## Acceptance Gates
@@ -147,11 +147,70 @@ Every candidate method must pass these gates before it can count as a win:
   requirements, and `must_preserve` facts.
 - wall-time stays inside the lane budget.
 - runtime changes are `none`.
-- privacy scan finds no private paths or secret-like values in reports.
+- privacy scan finds no private paths, local workspace roots, `.codex` paths,
+  `.env` values, Work paths, unsanitized Aql evidence, or secret-like values in
+  fixtures or reports.
 - exact-evidence lanes always choose raw.
 - skipped methods are reported as skipped, not as wins or losses.
 - reports include `insufficient-evidence` instead of positive savings when any
   guard is missing.
+
+## Runtime Audit Contract
+
+Benchmark execution must prove the non-invasive claim, not merely report it.
+
+- Fixture replay is the default. Live commands are allowed only from an explicit
+  read-only whitelist such as `git status --short`, `git diff --stat`, selected
+  `find` inventory commands, and approved Aql read-only token commands.
+- Live commands must run with explicit timeouts and captured stdout/stderr.
+- Where possible, live command comparisons run in temporary directories or
+  read-only repo views. Commands that might write cache, metrics, tee files,
+  build output, package state, or config are forbidden in v1.
+- The runner records pre/post `git status --short` for each live repo. Any new
+  tracked or unignored file outside approved generated report paths fails the
+  case.
+- The runner monitors known sensitive/config paths in report metadata:
+  `.codex/`, `.rtk/`, Headroom config, shell init files, MCP config, and
+  benchmark report directories.
+- Generated reports are local-only by default and live under ignored
+  `benchmarks/reports/`. A report can be promoted only after privacy scan and
+  explicit human review.
+- The report must include `runtime_changes` with concrete booleans for installs,
+  hooks, proxy, MCP, config writes, telemetry, raw output storage, and
+  unapproved filesystem writes.
+
+## Privacy And Redaction Gate
+
+Privacy is release-blocking, not a later polish item.
+
+- Do not store raw private command output. Store hashes, token counts, method
+  names, and sanitized snippets only when a fixture is public-safe.
+- Fail the benchmark if any fixture, generated report, or promoted example
+  contains `/Users/...`, the active workspace root, `.codex`, `.env`,
+  `Documents/Work`, secret-like assignments, production/customer data, or
+  unsanitized Aql raw evidence.
+- Aql vault read-only reports must not copy source bodies or private local paths.
+  They may store stable source IDs, wiki paths, command names, hashes, aggregate
+  tokens, and verdicts.
+- Public-release claims require a clean privacy scan over tracked files and any
+  report proposed for publication.
+
+## Wall-Time Measurement Contract
+
+Wall-time gates must be deterministic enough to compare methods fairly.
+
+- Default lane budgets:
+  - command-output: 250 ms per fixture replay, 2 seconds per live read-only
+    command.
+  - long-context: 500 ms for fixture replay.
+  - code-generation lens: 500 ms for deterministic fixture analysis.
+  - exact-evidence: raw only; compression candidates are not timed as winners.
+  - vault-readonly: 15 seconds per approved Aql live command.
+- Fixture methods run at least 3 times and report median wall-time. Live Aql
+  commands run once by default to avoid long-running validation loops.
+- Timeout means the method is invalid for that case, except raw exact evidence
+  fallback remains the safety baseline.
+- Reports must include `wall_time_ms`, `timeout`, and `repeat_count`.
 
 ## Proposed Architecture
 
@@ -183,11 +242,51 @@ The benchmark report should include:
 - `tools`: availability and versions for RTK and Headroom.
 - `cases`: lane, fixture, methods, tokens, wall-time, preservation result,
   selected method, winner, and decision reason.
-- `strategy_totals`: raw total, FlowTrim-selected total, RTK total where
-  applicable, Headroom total where applicable, and lane-specific savings.
+- `metric_totals`: lane-specific totals grouped by metric family:
+  token-bearing lanes (`command-output`, `long-context`), code lens metrics
+  (`generated_loc`, `delete_items`, `duplicate_abstractions`), and
+  refusal-correctness metrics (`exact-evidence` raw decisions).
 - `vault_verdict`: `not-vault`, `hybrid-only`, `vault-safe`, or
   `insufficient-evidence`.
 - `upgrade_backlog`: ordered list of public-release improvements.
+
+Example case record:
+
+```json
+{
+  "case_id": "command-output/noisy-build-pass",
+  "lane": "command-output",
+  "fixture": "benchmarks/fixtures/logs/noisy-build-pass.txt",
+  "methods": {
+    "raw": {"status": "ok", "tokens": 1200, "wall_time_ms": 0},
+    "rtk": {"status": "ok", "tokens": 520, "wall_time_ms": 180},
+    "headroom": {"status": "skipped", "reason": "not installed"},
+    "flowtrim-selected": {"status": "selected", "method": "rtk"}
+  },
+  "preservation": {"passed": true, "missing": []},
+  "runtime_changes": {"hooks": false, "proxy": false, "config_writes": false},
+  "winner": "rtk",
+  "counts_as_claim": true
+}
+```
+
+## Ponytail Lens Schema
+
+Ponytail-style results must be deterministic enough to test. Each delete-list
+item must include:
+
+- `item`: short name of the code or abstraction to remove.
+- `severity`: `must-delete`, `should-delete`, or `watch`.
+- `rationale`: why it is unnecessary or duplicated.
+- `estimated_loc_delta`: positive or negative line estimate.
+- `requirement_affected`: requirement ID or `none`.
+- `test_surface_affected`: test name/path or `none`.
+- `must_keep_violation`: true if deleting it would violate a requirement,
+  preservation fact, or test surface.
+
+The lens passes only when all `must-delete` and `should-delete` recommendations
+avoid `must_keep_violation`, preserve required behavior, and keep the planned
+test surface intact.
 
 ## Heavy Test Strategy
 
@@ -197,8 +296,13 @@ The first suite should include at least:
 - 3 exact-evidence cases: source quote, failing stack trace, line-level diff.
 - 2 long-context cases: JSON trace and handoff context.
 - 2 code-generation cases: over-abstract helper and duplicate conversion logic.
-- 2 vault read-only cases: Aql short-command raw win and Aql measured RTK-style
-  command-output candidate.
+- 6 vault read-only cases:
+  - Aql short-command raw win.
+  - Aql measured RTK-style command-output candidate.
+  - packet or `llm_brief` semantic routing case.
+  - generated index/report inventory case.
+  - source-ID preservation case.
+  - approval/sensitivity boundary case.
 
 The suite should also run mutation-like adversarial checks:
 
@@ -215,8 +319,9 @@ Use these decision labels:
 - `not-vault`: FlowTrim loses or creates safety risk versus Atlas context economy.
 - `hybrid-only`: FlowTrim helps command-output or main-work lanes, but Atlas
   packet/context economy remains vault default.
-- `vault-safe`: FlowTrim wins on measured vault read-only cases without changing
-  semantic retrieval or approval gates.
+- `vault-safe`: FlowTrim wins on all required vault read-only case families
+  without changing semantic retrieval, source boundaries, approval gates, or
+  exact-evidence handling.
 - `insufficient-evidence`: benchmark coverage is too narrow or a required tool is
   skipped.
 
@@ -228,6 +333,17 @@ vault recommendation through read-only benchmark results.
 
 The benchmark lab should score these before public release:
 
+Release-blocking gates:
+
+- clean unit suite, skill validation, benchmark smoke, and privacy scan.
+- package entry points or documented `PYTHONPATH=src` limitation.
+- sanitized benchmark example report with synthetic data only.
+- RTK and Headroom availability/version capture.
+- license/author metadata review.
+- no tracked generated reports that contain local paths or raw private output.
+
+Upgrade backlog:
+
 - package entry points instead of requiring `PYTHONPATH=src`.
 - CI command for tests, skill validation, benchmark smoke, and privacy scan.
 - richer privacy scanner: tracked-file mode, ignored-cache skip, spaced env
@@ -238,6 +354,25 @@ The benchmark lab should score these before public release:
 - Ponytail lens documentation that avoids claiming direct token compression.
 - license/author metadata review before public publication.
 - branch/default-branch and remote publication checklist.
+
+## Claim Language
+
+Allowed claims:
+
+- "FlowTrim selected a safe lower-token method for this measured lane."
+- "FlowTrim correctly chose raw because compression was unsafe or not cheaper."
+- "Headroom was skipped because it was unavailable."
+- "Ponytail lens reduced code complexity in this fixture without claiming direct
+  command-output compression."
+- "Vault verdict is `hybrid-only` unless all vault read-only case families pass."
+
+Forbidden claims:
+
+- "FlowTrim beats RTK, Ponytail, and Headroom globally."
+- "FlowTrim is vault-safe" from command-output cases alone.
+- "Headroom lost" when Headroom was unavailable or skipped.
+- "Ponytail saved tokens" unless generated text size was directly measured.
+- "No runtime changes" without the runtime audit evidence above.
 
 ## Success Criteria
 
@@ -265,3 +400,7 @@ old Atlas context economy is still better.
 - Should Work repos be included now? Default: synthetic code-heavy fixtures
   first; real Work repos require explicit target approval because local metrics
   can reveal private paths.
+- Should the existing `flowtrim_benchmark.py` wrapper be extended or should a new
+  `flowtrim_benchmark_suite.py` be added? Default: extend the existing wrapper
+  with a `suite` subcommand unless the implementation plan shows the wrapper
+  would become confusing.
