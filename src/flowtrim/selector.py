@@ -24,12 +24,16 @@ def select_best_method(lane: Lane, results: list[MethodResult]) -> MethodResult:
         return raw
 
     wall_time_budget_ms = LANE_WALL_TIME_BUDGET_MS[lane]
-    valid_results = [
+    candidate_results = [
         result
         for result in results
-        if result.valid and result.lane == lane and result.wall_time_ms <= wall_time_budget_ms
+        if result.valid
+        and result.lane == lane
+        and result.method != "raw"
+        and result.wall_time_ms <= wall_time_budget_ms
+        and result.tokens < raw.tokens
     ]
-    if not valid_results:
+    if not candidate_results:
         return raw
 
-    return min(valid_results, key=lambda result: (result.tokens, result.wall_time_ms, result.method))
+    return min(candidate_results, key=lambda result: (result.tokens, result.wall_time_ms, result.method))

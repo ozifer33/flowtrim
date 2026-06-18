@@ -67,6 +67,26 @@ class ClassifierSelectorTest(unittest.TestCase):
 
         self.assertEqual(selected, raw)
 
+    def test_select_returns_slow_raw_over_faster_candidate_with_more_tokens(self):
+        raw = MethodResult("raw", Lane.COMMAND_OUTPUT, 100, 100, 10_000, True, "raw")
+        summary = MethodResult(
+            "summary", Lane.COMMAND_OUTPUT, 120, 100, 10, True, "not smaller"
+        )
+
+        selected = select_best_method(Lane.COMMAND_OUTPUT, [raw, summary])
+
+        self.assertEqual(selected, raw)
+
+    def test_select_returns_slow_raw_over_faster_candidate_with_equal_tokens(self):
+        raw = MethodResult("raw", Lane.COMMAND_OUTPUT, 100, 100, 10_000, True, "raw")
+        summary = MethodResult(
+            "summary", Lane.COMMAND_OUTPUT, 100, 100, 10, True, "same size"
+        )
+
+        selected = select_best_method(Lane.COMMAND_OUTPUT, [raw, summary])
+
+        self.assertEqual(selected, raw)
+
     def test_select_prefers_faster_lower_token_result_over_raw(self):
         raw = result("raw", Lane.COMMAND_OUTPUT, 100)
         compact = result("summary", Lane.COMMAND_OUTPUT, 25, wall_time_ms=200)
