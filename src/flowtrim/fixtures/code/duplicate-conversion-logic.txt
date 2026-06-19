@@ -1,0 +1,4 @@
+duplicate conversion helper convert_price_to_cents duplicates money_to_cents
+delete redundant wrapper PriceFormatterProxy
+remove dead code fallback_currency_mapper
+ordinary implementation line should stay

@@ -1,0 +1,4 @@
+duplicate helper convert_user_id duplicates normalize_user_id
+over-abstract wrapper UserIdFormatter only forwards to convert_user_id
+remove unused adapter DemoUserAdapter
+ordinary implementation line should stay

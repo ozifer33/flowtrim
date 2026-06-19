@@ -1,0 +1,19 @@
+{
+  "trace_id": "trace-demo-001",
+  "required_ids": ["job-demo-17", "source:demo-trace-001"],
+  "steps": [
+    {"tool": "read", "path": "src/example.py", "status": "ok"},
+    {"tool": "test", "path": "tests/test_example.py", "status": "failed", "error": "DEMO_FAILURE"},
+    {"tool": "summarize", "path": "docs/example.md", "status": "ok"}
+  ],
+  "noise": [
+    "event 001 repeated diagnostic",
+    "event 002 repeated diagnostic",
+    "event 003 repeated diagnostic",
+    "event 004 repeated diagnostic",
+    "event 005 repeated diagnostic",
+    "event 006 repeated diagnostic",
+    "event 007 repeated diagnostic",
+    "event 008 repeated diagnostic"
+  ]
+}

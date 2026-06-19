@@ -1,0 +1,5 @@
+diff --git a/src/example.py b/src/example.py
+@@ -10,7 +10,7 @@ def calculate_total(items):
+-    return sum(item.amount for item in items)
++    return sum(item.net_amount for item in items)
+Required line: src/example.py:10

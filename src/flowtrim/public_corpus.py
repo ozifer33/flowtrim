@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 from typing import Any, Callable
 
@@ -11,8 +12,8 @@ from typing import Any, Callable
 PUBLIC_CORPUS_SCHEMA = "flowtrim-public-corpus/v1"
 PUBLIC_CORPUS_AUDIT_SCHEMA = "flowtrim-public-corpus-audit/v1"
 PUBLIC_OPEN_SOURCE_PROFILE = "public-open-source-readonly"
-DEFAULT_PUBLIC_CORPUS_MANIFEST = (
-    Path(__file__).resolve().parents[2] / "benchmarks" / "public-corpus" / "manifest.v1.json"
+DEFAULT_PUBLIC_CORPUS_MANIFEST = Path(
+    resources.files("flowtrim").joinpath("public-corpus", "manifest.v1.json")
 )
 DEFAULT_PUBLIC_CACHE_ROOT = Path("/tmp/flowtrim-public-corpus")
 PINNED_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")

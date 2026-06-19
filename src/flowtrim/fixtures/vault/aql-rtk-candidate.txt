@@ -1,0 +1,4 @@
+Aql read-only token candidate.
+Command shape: git diff --stat
+Expected result: raw output stays preferable unless measured helper is strictly smaller and safe.
+Keep source ID: source:demo-vault-rtk-001

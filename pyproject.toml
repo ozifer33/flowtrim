@@ -41,3 +41,11 @@ flowtrim-classify = "flowtrim.cli.orchestrator:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+flowtrim = [
+  "fixtures/**/*.json",
+  "fixtures/**/*.md",
+  "fixtures/**/*.txt",
+  "public-corpus/*.json",
+]

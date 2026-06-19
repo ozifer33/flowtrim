@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +25,7 @@ from .selector import LANE_WALL_TIME_BUDGET_MS
 
 
 SCHEMA = "flowtrim-benchmark/v1"
-DEFAULT_FIXTURES_ROOT = Path(__file__).resolve().parents[2] / "benchmarks" / "fixtures"
+DEFAULT_FIXTURES_ROOT = Path(resources.files("flowtrim").joinpath("fixtures"))
 DEFAULT_WORK_ROOT = Path.home() / "Documents" / "Work"
 RAW_SHORT_TOKEN_LIMIT = 8
 VAULT_READONLY_WALL_TIME_BUDGET_MS = 15_000
