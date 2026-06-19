@@ -137,6 +137,62 @@ class AdapterTest(unittest.TestCase):
         self.assertEqual(measurement.payload, {"version": "headroom 1.2.3"})
         self.assertIn("safe adapter", measurement.reason)
 
+    def test_headroom_adapter_uses_injected_direct_runner_when_available(self):
+        calls = []
+
+        def runner(input_text):
+            calls.append(input_text)
+            return "trace-demo-001 job-demo-17 source:demo-trace-001 compact failure facts"
+
+        measurement = HeadroomAdapter(
+            which=lambda executable: "/usr/local/bin/headroom",
+            version_runner=lambda executable: "headroom 1.2.3",
+            runner=runner,
+        ).measure(
+            "trace-demo-001 job-demo-17 source:demo-trace-001 long noisy context",
+            Lane.LONG_CONTEXT,
+            must_preserve=("trace-demo-001", "job-demo-17", "source:demo-trace-001"),
+            repeat_count=3,
+        )
+
+        self.assertEqual(calls, ["trace-demo-001 job-demo-17 source:demo-trace-001 long noisy context"] * 3)
+        self.assertEqual(measurement.method, "headroom-direct")
+        self.assertEqual(measurement.status, BenchmarkStatus.OK)
+        self.assertTrue(measurement.guard_passed)
+        self.assertEqual(measurement.payload["version"], "headroom 1.2.3")
+        self.assertIn("sanitized_snippet", measurement.payload)
+
+    def test_headroom_adapter_reports_guard_failure_for_missing_direct_items(self):
+        measurement = HeadroomAdapter(
+            which=lambda executable: "/usr/local/bin/headroom",
+            runner=lambda text: "compact summary missing the source id",
+        ).measure(
+            "trace-demo-001 source:demo-trace-001 long noisy context",
+            Lane.LONG_CONTEXT,
+            must_preserve=("trace-demo-001", "source:demo-trace-001"),
+        )
+
+        self.assertEqual(measurement.status, BenchmarkStatus.OK)
+        self.assertFalse(measurement.guard_passed)
+        self.assertIn("missing required items", measurement.reason)
+
+    def test_headroom_adapter_rejects_proxy_wrap_or_mcp_direct_output(self):
+        unsafe_outputs = [
+            "headroom proxy --port 8787",
+            "headroom wrap codex",
+            "headroom mcp install",
+            "headroom learn --apply",
+        ]
+        for output in unsafe_outputs:
+            with self.subTest(output=output):
+                measurement = HeadroomAdapter(
+                    which=lambda executable: "/usr/local/bin/headroom",
+                    runner=lambda text, output=output: output,
+                ).measure("trace-demo-001 long noisy context", Lane.LONG_CONTEXT)
+
+                self.assertFalse(measurement.guard_passed)
+                self.assertIn("forbidden headroom mode", measurement.reason)
+
     def test_ponytail_lens_returns_safe_delete_list_payload(self):
         measurement = PonytailLens().analyze(
             "\n".join(

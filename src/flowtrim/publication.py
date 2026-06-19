@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .benchmark import BenchmarkReport, RuntimeChanges, WORK_COMMIT_HISTORY_PROFILE
+from .public_corpus import PUBLIC_OPEN_SOURCE_PROFILE
 
 
 FORBIDDEN_CLAIMS = (
@@ -70,6 +71,28 @@ def validate_claim(report: BenchmarkReport, claim: str) -> bool:
     if _is_forbidden_claim(report, normalized):
         return False
 
+    if "headroom direct was skipped" in normalized or "headroom direct was unavailable" in normalized:
+        return any(
+            method.method == "headroom-direct" and method.status == "skipped"
+            for case in report.cases
+            for method in case.methods
+        )
+    if "headroom direct was measured" in normalized:
+        return report.profile == PUBLIC_OPEN_SOURCE_PROFILE and any(
+            method.method == "headroom-direct"
+            and method.status not in ("skipped", "timeout")
+            for case in report.cases
+            for method in case.methods
+        )
+    if "pinned public corpus" in normalized:
+        return (
+            report.profile == PUBLIC_OPEN_SOURCE_PROFILE
+            and report.metric_totals["token-bearing"]["wins"] > 0
+        )
+    if "generated/lock-heavy public commits are separated as controls" in normalized:
+        return report.profile == PUBLIC_OPEN_SOURCE_PROFILE and any(
+            "/control-" in case.case_id for case in report.cases
+        )
     if "safe lower-token method" in normalized:
         return report.metric_totals["token-bearing"]["wins"] > 0
     if "correctly chose raw" in normalized:
@@ -139,6 +162,12 @@ def _allowed_claims(report: BenchmarkReport) -> list[str]:
         claims.append("FlowTrim has private local evidence from historical Work commits.")
         if any("/control-" in case.case_id for case in report.cases):
             claims.append("Generated/lock-heavy commits are separated as controls.")
+    if report.profile == PUBLIC_OPEN_SOURCE_PROFILE and report.metric_totals["token-bearing"]["wins"] > 0:
+        claims.append(
+            "On the pinned public corpus, FlowTrim selected a safe lower-token method for measured lanes."
+        )
+        if any("/control-" in case.case_id for case in report.cases):
+            claims.append("Generated/lock-heavy public commits are separated as controls.")
     return claims
 
 

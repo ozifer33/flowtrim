@@ -1,0 +1,55 @@
+{
+  "schema": "flowtrim-public-corpus/v1",
+  "repos": [
+    {
+      "url": "https://github.com/vuejs/core.git",
+      "branch": "main",
+      "pinned_commit": "325eb1d9a12e3b90fe36f755291b8f9ba5977820",
+      "license": "MIT",
+      "language_family": "typescript-vue",
+      "fetch_depth": 40,
+      "include_extensions": [".ts", ".tsx", ".js", ".jsx", ".vue"],
+      "exclude_extensions": [".json", ".lock", ".snap"]
+    },
+    {
+      "url": "https://github.com/vitejs/vite.git",
+      "branch": "main",
+      "pinned_commit": "a2fff212d9ec6838c2b046e5bcc900d4334df3ff",
+      "license": "MIT",
+      "language_family": "typescript",
+      "fetch_depth": 40,
+      "include_extensions": [".ts", ".tsx", ".js", ".jsx", ".vue"],
+      "exclude_extensions": [".json", ".lock", ".snap"]
+    },
+    {
+      "url": "https://github.com/expressjs/express.git",
+      "branch": "master",
+      "pinned_commit": "18e5985b8a9d5e8423db0a9121f22bdaecd5b120",
+      "license": "MIT",
+      "language_family": "javascript",
+      "fetch_depth": 40,
+      "include_extensions": [".js", ".cjs", ".mjs", ".ts"],
+      "exclude_extensions": [".json", ".lock"]
+    },
+    {
+      "url": "https://github.com/flutter/flutter.git",
+      "branch": "master",
+      "pinned_commit": "fc0d261a9c135036224ab44bf5e95c9e1d36d45f",
+      "license": "BSD-3-Clause",
+      "language_family": "dart",
+      "fetch_depth": 40,
+      "include_extensions": [".dart"],
+      "exclude_extensions": [".json", ".lock", ".g.dart", ".freezed.dart", ".yaml", ".yml"]
+    },
+    {
+      "url": "https://github.com/angular/angular.git",
+      "branch": "main",
+      "pinned_commit": "302dd0f7c606c3fefede7c2e4b815f8579cc5b28",
+      "license": "MIT",
+      "language_family": "typescript",
+      "fetch_depth": 40,
+      "include_extensions": [".ts", ".tsx", ".js", ".jsx"],
+      "exclude_extensions": [".json", ".lock", ".snap"]
+    }
+  ]
+}

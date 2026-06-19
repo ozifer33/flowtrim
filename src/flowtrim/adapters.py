@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import statistics
 import subprocess
@@ -19,6 +20,15 @@ DEFAULT_REPEAT_COUNT = 3
 DEFAULT_FIXTURE_TIMEOUT_MS = 250
 DEFAULT_CODE_LENS_TIMEOUT_MS = 500
 DEFAULT_VERSION_TIMEOUT_MS = 500
+FORBIDDEN_HEADROOM_DIRECT_MARKERS = (
+    "headroom proxy",
+    "headroom wrap",
+    "headroom mcp",
+    "mcp install",
+    "headroom learn",
+    "openai_base_url",
+    ".codex" + "/config.toml",
+)
 
 
 @dataclass(frozen=True)
@@ -150,32 +160,70 @@ class HeadroomAdapter:
         executable: str | None = None,
         which: Callable[[str], str | None] = shutil.which,
         version_runner: Callable[[str], str | None] | None = None,
+        runner: Callable[[str], Any] | None = None,
     ) -> None:
         self.executable = executable or "headroom"
         self.which = which
         self.version_runner = version_runner or _run_version
+        self.runner = runner
 
     def measure(
         self,
         text: str,
         lane: Lane,
         *,
-        repeat_count: int = 0,
+        must_preserve: Sequence[str] = (),
+        repeat_count: int = DEFAULT_REPEAT_COUNT,
+        timeout_ms: int = DEFAULT_FIXTURE_TIMEOUT_MS,
     ) -> MethodMeasurement:
         resolved = self.which(self.executable)
         if resolved is None:
             return _skipped_measurement(
                 "headroom-direct",
                 reason=f"{self.executable} executable not found",
-                repeat_count=repeat_count,
+                repeat_count=0,
             )
 
         version = self.version_runner(resolved)
-        payload = {"version": version} if version else None
-        return _skipped_measurement(
-            "headroom-direct",
-            reason="headroom safe adapter only performs availability/version checks",
-            repeat_count=repeat_count,
+        runner = self.runner or _headroom_python_runner()
+        if runner is None:
+            payload = {"version": version} if version else None
+            return _skipped_measurement(
+                "headroom-direct",
+                reason="headroom safe adapter direct runner not configured",
+                repeat_count=0,
+                payload=payload,
+            )
+
+        timing = median_measure(
+            lambda: _coerce_runner_output(_run_headroom_direct(runner, text)),
+            repeat_count,
+            timeout_ms,
+        )
+        output = timing.value or ""
+        forbidden = _headroom_forbidden_reason(output)
+        missing = _missing_required_items(output, must_preserve)
+        guard_passed = not forbidden and not missing and not timing.timeout
+        reason = None
+        if forbidden:
+            reason = forbidden
+        elif missing:
+            reason = "missing required items: " + ", ".join(missing)
+        elif timing.timeout:
+            reason = "timeout"
+
+        payload = {"content_hash": hash_text(output), "sanitized_snippet": output}
+        if version:
+            payload["version"] = version
+        return MethodMeasurement(
+            method="headroom-direct",
+            status=BenchmarkStatus.TIMEOUT if timing.timeout else BenchmarkStatus.OK,
+            tokens=estimate_tokens(output),
+            wall_time_ms=timing.wall_time_ms,
+            timeout=timing.timeout,
+            repeat_count=timing.repeat_count,
+            guard_passed=guard_passed,
+            reason=reason,
             payload=payload,
         )
 
@@ -239,6 +287,37 @@ def _coerce_runner_output(value: Any) -> str:
         stdout = getattr(value, "stdout") or ""
         return _coerce_runner_output(stdout)
     return str(value)
+
+
+def _run_headroom_direct(runner: Callable[[str], Any], text: str) -> Any:
+    previous = os.environ.get("HEADROOM_TELEMETRY")
+    os.environ["HEADROOM_TELEMETRY"] = "off"
+    try:
+        return runner(text)
+    finally:
+        if previous is None:
+            os.environ.pop("HEADROOM_TELEMETRY", None)
+        else:
+            os.environ["HEADROOM_TELEMETRY"] = previous
+
+
+def _headroom_python_runner() -> Callable[[str], str] | None:
+    try:
+        from headroom import compress  # type: ignore
+    except Exception:
+        return None
+
+    def runner(text: str) -> str:
+        return _coerce_runner_output(compress([{"role": "user", "content": text}]))
+
+    return runner
+
+
+def _headroom_forbidden_reason(output: str) -> str | None:
+    lowered = output.lower()
+    if any(marker in lowered for marker in FORBIDDEN_HEADROOM_DIRECT_MARKERS):
+        return "forbidden headroom mode in direct output"
+    return None
 
 
 def _missing_required_items(

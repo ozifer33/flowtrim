@@ -97,7 +97,7 @@ def _status(text: str, lines: list[str]) -> str:
     lowered = text.lower()
     if (
         re.search(r"\b[1-9]\d*\s+failed\b", lowered)
-        or any(line.upper().endswith(" FAILED") for line in lines)
+        or any(_line_is_failure_marker(line) for line in lines)
         or "error keep:" in lowered
     ):
         return "fail"
@@ -106,6 +106,11 @@ def _status(text: str, lines: list[str]) -> str:
     if "warn" in lowered:
         return "warning"
     return "unknown"
+
+
+def _line_is_failure_marker(line: str) -> bool:
+    upper = line.upper()
+    return upper.endswith(" FAILED") and not re.search(r"\b0\s+FAILED\b", upper)
 
 
 def _file_paths(text: str) -> list[str]:

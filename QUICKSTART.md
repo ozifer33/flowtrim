@@ -1,0 +1,69 @@
+# FlowTrim Quickstart
+
+FlowTrim is a public alpha candidate for checking when an AI agent should keep
+raw evidence and when it can use a smaller, audited context packet.
+
+## Install
+
+From a checkout:
+
+```bash
+python3 -m pip install -e .
+```
+
+Smoke check:
+
+```bash
+flowtrim-benchmark abcd
+flowtrim-classify "npm test produced a long build log"
+```
+
+Expected output:
+
+- `flowtrim-benchmark abcd` prints `1`.
+- `flowtrim-classify ...` prints `command-output`.
+
+## Run Public-Safe Proofs
+
+These commands require no private repositories and no network clone:
+
+```bash
+flowtrim-benchmark suite --profile synthetic-heavy --format json
+flowtrim-benchmark suite --profile public-playground-readonly --format json
+flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json
+```
+
+## Run Gates
+
+```bash
+flowtrim-benchmark privacy-scan --tracked --format json
+flowtrim-benchmark docs-check --format json
+flowtrim-benchmark skill-check --skill-root skills/flowtrim --format json
+```
+
+Claims should be checked against a generated report:
+
+```bash
+flowtrim-benchmark suite --profile synthetic-heavy --format json > /tmp/flowtrim-synthetic.json
+flowtrim-benchmark claim-check --report /tmp/flowtrim-synthetic.json --claim "FlowTrim selected a safe lower-token method for this measured lane." --format json
+```
+
+## Pinned Public Corpus
+
+The pinned public corpus is manual because it may clone large public repos into a
+local cache:
+
+```bash
+flowtrim-benchmark public-corpus prepare --manifest benchmarks/public-corpus/manifest.v1.json --cache-root /tmp/flowtrim-public-corpus
+flowtrim-benchmark suite --profile public-open-source-readonly --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus --format json
+```
+
+This supports only pinned-corpus claims, not global benchmark claims.
+
+## Source-Checkout Fallback
+
+Use this only before installing the package:
+
+```bash
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py abcd
+```

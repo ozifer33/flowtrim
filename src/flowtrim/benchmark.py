@@ -12,6 +12,14 @@ from typing import Any
 from .metrics import estimate_tokens
 from .models import Lane
 from .privacy import scan_text
+from .public_corpus import (
+    DEFAULT_PUBLIC_CACHE_ROOT,
+    DEFAULT_PUBLIC_CORPUS_MANIFEST,
+    PUBLIC_OPEN_SOURCE_PROFILE,
+    PublicRepoSpec,
+    load_public_corpus_manifest,
+    public_repo_cache_path,
+)
 from .selector import LANE_WALL_TIME_BUDGET_MS
 
 
@@ -24,6 +32,7 @@ WORK_CODE_WALL_TIME_BUDGET_MS = 500
 ATLAS_CONTEXT_METHOD = "atlas-context-economy"
 BASELINE_CODE_METHOD = "baseline-code"
 WORK_COMMIT_HISTORY_PROFILE = "work-commit-history-readonly"
+PUBLIC_PLAYGROUND_PROFILE = "public-playground-readonly"
 DEFAULT_WORK_HISTORY_COMMIT_LIMIT = 6
 DEFAULT_WORK_HISTORY_FILES_PER_COMMIT = 4
 WORK_CODE_EXTENSIONS = frozenset(
@@ -138,8 +147,8 @@ REQUIRED_VAULT_FAMILIES = frozenset(
     }
 )
 DEFAULT_UPGRADE_BACKLOG = [
-    "Add package entry points so PYTHONPATH=src is no longer required.",
-    "Add CI for unit tests, skill validation, benchmark smoke, and privacy scan.",
+    "Keep CI matrix passing for unit tests, benchmark smoke, skill check, and privacy scan.",
+    "Document package entry points and source-checkout fallback commands.",
     "Publish only sanitized synthetic benchmark example reports.",
     "Capture RTK and Headroom versions when available without storing local paths.",
     "Document Ponytail lens as complexity reduction, not direct token compression.",
@@ -514,10 +523,13 @@ def run_suite(
     aql_root: str | Path | None = None,
     work_root: str | Path | None = None,
     work_repos: list[str | Path] | tuple[str | Path, ...] | None = None,
+    public_corpus_manifest: str | Path | None = None,
+    public_cache_root: str | Path | None = None,
     repo_limit: int = 9,
     files_per_repo: int = 12,
     commit_limit: int = DEFAULT_WORK_HISTORY_COMMIT_LIMIT,
     files_per_commit: int = DEFAULT_WORK_HISTORY_FILES_PER_COMMIT,
+    headroom_executable: str | None = None,
 ) -> BenchmarkReport:
     if profile == "synthetic-heavy":
         cases = build_synthetic_heavy_suite(fixtures_root)
@@ -535,6 +547,16 @@ def run_suite(
             commit_limit=commit_limit,
             files_per_commit=files_per_commit,
         )
+    elif profile == PUBLIC_OPEN_SOURCE_PROFILE:
+        cases = build_public_open_source_readonly_suite(
+            public_corpus_manifest or DEFAULT_PUBLIC_CORPUS_MANIFEST,
+            public_cache_root or DEFAULT_PUBLIC_CACHE_ROOT,
+            commit_limit=commit_limit,
+            files_per_commit=files_per_commit,
+            headroom_executable=headroom_executable,
+        )
+    elif profile == PUBLIC_PLAYGROUND_PROFILE:
+        cases = build_public_playground_readonly_suite()
     else:
         raise ValueError(f"unknown benchmark profile: {profile}")
 
@@ -544,6 +566,180 @@ def run_suite(
         _tool_infos(),
         list(DEFAULT_UPGRADE_BACKLOG),
     )
+
+
+def build_public_playground_readonly_suite() -> list[BenchmarkCase]:
+    pytest_log = "\n".join(
+        [
+            "tests/test_public_api.py::test_public_retry FAILED",
+            "src/public_api.py:42: PublicRetryError: retry budget exceeded",
+            "ERROR keep: src/public_api.py",
+            "ERROR keep: PublicRetryError",
+            "ERROR keep: tests/test_public_api.py::test_public_retry",
+            *[f"INFO noise: pytest progress chunk {index}" for index in range(40)],
+        ]
+    )
+    vite_log = "\n".join(
+        [
+            "src/App.tsx FEATURE_FLAG_PUBLIC",
+            "2 passed, 0 failed",
+            *[f"chunk public-{index}.js transformed" for index in range(50)],
+        ]
+    )
+    ts_log = "\n".join(
+        [
+            "src/types.ts:10:5 - TypeScriptError: Type mismatch",
+            "ERROR keep: src/types.ts",
+            "ERROR keep: TypeScriptError",
+            *[f"INFO noise: tsc diagnostic context {index}" for index in range(35)],
+        ]
+    )
+    diff_text = "\n".join(
+        [
+            "diff --git a/src/public_api.py b/src/public_api.py",
+            "@@ -1,3 +1,3 @@",
+            "-old public value",
+            "+new public value",
+        ]
+    )
+    duplicate_code = "\n".join(
+        [
+            "export function publicPlayground(input: string) {",
+            "  const repeated = normalizePublicPlaygroundValue(input);",
+            "  const repeated = normalizePublicPlaygroundValue(input);",
+            "  const repeated = normalizePublicPlaygroundValue(input);",
+            "  return repeated;",
+            "}",
+        ]
+    )
+    return [
+        _inline_command_case(
+            "public-playground/pytest-command",
+            "public-playground/pytest-log",
+            pytest_log,
+            must_preserve=(
+                "src/public_api.py",
+                "PublicRetryError",
+                "tests/test_public_api.py::test_public_retry",
+            ),
+        ),
+        _inline_command_case(
+            "public-playground/vite-command",
+            "public-playground/vite-log",
+            vite_log,
+            must_preserve=("src/App.tsx", "FEATURE_FLAG_PUBLIC", "2 passed"),
+        ),
+        _inline_command_case(
+            "public-playground/typescript-command",
+            "public-playground/typescript-log",
+            ts_log,
+            must_preserve=("src/types.ts", "TypeScriptError"),
+        ),
+        _inline_command_case(
+            "public-playground/small-command",
+            "public-playground/small-command",
+            "ok",
+            must_preserve=(),
+        ),
+        _inline_exact_case(
+            "public-playground/exact-diff",
+            "public-playground/exact-diff",
+            diff_text,
+            must_preserve=("diff --git", "src/public_api.py"),
+        ),
+        _inline_code_lens_case(
+            "public-playground/code-lens",
+            "public-playground/code-lens",
+            duplicate_code,
+        ),
+        _inline_exact_case(
+            "public-playground/control-lock",
+            "public-playground/control-lock",
+            "\n".join(f"package-lock public dependency {index}" for index in range(30)),
+            must_preserve=("package-lock",),
+        ),
+    ]
+
+
+def build_public_open_source_readonly_suite(
+    manifest_path: str | Path,
+    cache_root: str | Path,
+    *,
+    commit_limit: int = DEFAULT_WORK_HISTORY_COMMIT_LIMIT,
+    files_per_commit: int = DEFAULT_WORK_HISTORY_FILES_PER_COMMIT,
+    headroom_executable: str | None = None,
+) -> list[BenchmarkCase]:
+    if commit_limit < 1 or files_per_commit < 1:
+        return []
+
+    manifest = load_public_corpus_manifest(manifest_path)
+    root = Path(cache_root)
+    cases: list[BenchmarkCase] = []
+    for spec in manifest.repos:
+        repo_root = public_repo_cache_path(root, spec)
+        if not repo_root.exists():
+            raise ValueError(f"public corpus cache missing: {spec.alias}")
+        if not _public_commit_exists(repo_root, spec.pinned_commit):
+            raise ValueError(f"public corpus pinned commit missing: {spec.alias}")
+
+        repo_label = spec.alias
+        pre_status = _run_readonly_git_status(repo_root)
+        commits = _select_ranked_history_commits(
+            _public_history_commits(repo_root, spec, commit_limit * 4),
+            commit_limit,
+        )
+        post_status = _run_readonly_git_status(repo_root)
+        runtime_changes = RuntimeChanges(
+            unapproved_filesystem_writes=bool(pre_status) or pre_status != post_status
+        )
+
+        commit_number = 1
+        for commit in commits:
+            commit_label = f"commit-{commit_number:03d}"
+            commit_number += 1
+            if commit.bucket in ("code-heavy", "command-output-heavy"):
+                cases.append(
+                    _public_history_command_case(
+                        repo_label,
+                        commit_label,
+                        commit,
+                        runtime_changes,
+                        headroom_executable=headroom_executable,
+                    )
+                )
+                cases.append(
+                    _public_history_exact_case(
+                        repo_label,
+                        commit_label,
+                        commit,
+                        runtime_changes,
+                    )
+                )
+                for file_index, stat in enumerate(
+                    _select_work_history_code_files(commit, files_per_commit),
+                    start=1,
+                ):
+                    code_case = _public_history_code_case(
+                        repo_root,
+                        repo_label,
+                        commit_label,
+                        f"code-{file_index:02d}",
+                        commit,
+                        stat,
+                        runtime_changes,
+                    )
+                    if code_case is not None:
+                        cases.append(code_case)
+            elif commit.bucket == "control":
+                cases.append(
+                    _public_history_control_case(
+                        repo_label,
+                        commit_label,
+                        commit,
+                        runtime_changes,
+                    )
+                )
+    return cases
 
 
 def build_work_commit_history_readonly_suite(
@@ -662,6 +858,87 @@ def _command_case(
         metric_family=MetricFamily.TOKEN_BEARING,
         methods=[RawAdapter().measure(text, Lane.COMMAND_OUTPUT), *measured_candidates],
         preservation=_preservation_for(text, text, must_preserve),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
+def _inline_command_case(
+    case_id: str,
+    fixture: str,
+    text: str,
+    *,
+    must_preserve: tuple[str, ...],
+) -> BenchmarkCase:
+    from .adapters import RawAdapter
+
+    candidates = [
+        _native_command_candidate(text, must_preserve=must_preserve),
+        _candidate(
+            "flowtrim-selected",
+            Lane.COMMAND_OUTPUT,
+            _public_playground_compact_text(text, must_preserve),
+            guard_passed=True,
+        ),
+    ]
+    measured_candidates = _enforce_method_preservation(candidates, must_preserve)
+    return BenchmarkCase(
+        case_id=case_id,
+        lane=Lane.COMMAND_OUTPUT,
+        fixture=fixture,
+        metric_family=MetricFamily.TOKEN_BEARING,
+        methods=[RawAdapter().measure(text, Lane.COMMAND_OUTPUT), *measured_candidates],
+        preservation=_preservation_for(text, text, must_preserve),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
+def _inline_exact_case(
+    case_id: str,
+    fixture: str,
+    text: str,
+    *,
+    must_preserve: tuple[str, ...],
+) -> BenchmarkCase:
+    from .adapters import RawAdapter
+
+    return BenchmarkCase(
+        case_id=case_id,
+        lane=Lane.EXACT_EVIDENCE,
+        fixture=fixture,
+        metric_family=MetricFamily.REFUSAL_CORRECTNESS,
+        methods=[
+            RawAdapter().measure(text, Lane.EXACT_EVIDENCE),
+            _candidate(
+                "unsafe-summary",
+                Lane.EXACT_EVIDENCE,
+                "public-safe compact exact evidence",
+                guard_passed=False,
+                reason="exact evidence cannot be summarized",
+            ),
+        ],
+        preservation=_preservation_for(text, text, must_preserve),
+        runtime_changes=RuntimeChanges(),
+    )
+
+
+def _inline_code_lens_case(
+    case_id: str,
+    fixture: str,
+    text: str,
+) -> BenchmarkCase:
+    from .adapters import RawAdapter, hash_text
+
+    raw = RawAdapter().measure(text, Lane.CODE_GENERATION)
+    raw = replace(raw, payload={"content_hash": hash_text(text)})
+    baseline = replace(raw, method=BASELINE_CODE_METHOD)
+    lens = _work_code_lens_measurement(text)
+    return BenchmarkCase(
+        case_id=case_id,
+        lane=Lane.CODE_GENERATION,
+        fixture=fixture,
+        metric_family=MetricFamily.CODE_LENS,
+        methods=[raw, baseline, lens],
+        preservation=PreservationSummary(True),
         runtime_changes=RuntimeChanges(),
     )
 
@@ -874,7 +1151,13 @@ def _select_work_history_commits(
     repo_root: Path,
     commit_limit: int,
 ) -> list[WorkHistoryCommit]:
-    commits = _work_history_commits(repo_root)
+    return _select_ranked_history_commits(_work_history_commits(repo_root), commit_limit)
+
+
+def _select_ranked_history_commits(
+    commits: list[WorkHistoryCommit],
+    commit_limit: int,
+) -> list[WorkHistoryCommit]:
     code_commits = sorted(
         (commit for commit in commits if commit.bucket == "code-heavy"),
         key=lambda commit: (-commit.code_churn, -len(commit.files), commit.commit),
@@ -907,6 +1190,93 @@ def _select_work_history_commits(
         add(commit)
 
     return selected
+
+
+def _public_commit_exists(repo_root: Path, pinned_commit: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "--no-optional-locks", "cat-file", "-e", f"{pinned_commit}^{{commit}}"],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
+def _public_history_commits(
+    repo_root: Path,
+    spec: PublicRepoSpec,
+    max_count: int,
+) -> list[WorkHistoryCommit]:
+    output = _run_git(
+        repo_root,
+        [
+            "log",
+            spec.pinned_commit,
+            "--no-merges",
+            "--date=short",
+            f"--max-count={max_count}",
+            "--pretty=format:@@@%H%x09%ad",
+            "--numstat",
+        ],
+        timeout=60,
+    )
+    commits: list[WorkHistoryCommit] = []
+    commit_hash = ""
+    date = ""
+    files: list[WorkHistoryFileStat] = []
+
+    def flush() -> None:
+        if not commit_hash:
+            return
+        commit = _build_work_history_commit(commit_hash, date, files)
+        if commit is not None:
+            commits.append(commit)
+
+    for line in output.splitlines():
+        if line.startswith("@@@"):
+            flush()
+            parts = line[3:].split("\t", 1)
+            commit_hash = parts[0]
+            date = parts[1] if len(parts) > 1 else ""
+            files = []
+            continue
+        parts = line.split("\t", 2)
+        if len(parts) != 3:
+            continue
+        added, deleted, path = parts
+        if added == "-" or deleted == "-":
+            continue
+        try:
+            stat = _public_history_file_stat(spec, path, int(added), int(deleted))
+        except ValueError:
+            continue
+        if stat is not None:
+            files.append(stat)
+
+    flush()
+    return commits
+
+
+def _public_history_file_stat(
+    spec: PublicRepoSpec,
+    path: str,
+    added: int,
+    deleted: int,
+) -> WorkHistoryFileStat | None:
+    stat = _work_history_file_stat(path, added, deleted)
+    if stat is None:
+        return None
+    if stat.extension in spec.exclude_extensions:
+        return replace(stat, category="control")
+    if spec.include_extensions and stat.category == "code" and stat.extension not in spec.include_extensions:
+        return replace(stat, category="other")
+    return stat
 
 
 def _work_history_commits(repo_root: Path) -> list[WorkHistoryCommit]:
@@ -1091,6 +1461,39 @@ def _work_history_command_case(
     )
 
 
+def _public_history_command_case(
+    repo_label: str,
+    commit_label: str,
+    commit: WorkHistoryCommit,
+    runtime_changes: RuntimeChanges,
+    *,
+    headroom_executable: str | None,
+) -> BenchmarkCase:
+    from .adapters import HeadroomAdapter, RawAdapter
+
+    raw_text = _work_history_raw_text(repo_label, commit_label, commit)
+    compact = _work_history_compact_text(repo_label, commit_label, commit)
+    must_preserve = _work_history_must_preserve(repo_label, commit_label, commit)
+    return BenchmarkCase(
+        case_id=f"public-corpus/{repo_label}/{commit_label}/command-01",
+        lane=Lane.COMMAND_OUTPUT,
+        fixture=f"public-corpus/{repo_label}/{commit_label}/command-01",
+        metric_family=MetricFamily.TOKEN_BEARING,
+        methods=[
+            RawAdapter().measure(raw_text, Lane.COMMAND_OUTPUT),
+            _rtk_fixture_candidate(raw_text, compact, must_preserve=must_preserve),
+            _native_command_candidate(raw_text, must_preserve=must_preserve),
+            HeadroomAdapter(executable=headroom_executable).measure(
+                raw_text,
+                Lane.COMMAND_OUTPUT,
+                must_preserve=must_preserve,
+            ),
+        ],
+        preservation=_preservation_for(raw_text, compact, must_preserve),
+        runtime_changes=runtime_changes,
+    )
+
+
 def _work_history_exact_case(
     repo_label: str,
     commit_label: str,
@@ -1113,6 +1516,39 @@ def _work_history_exact_case(
                 f"{repo_label} {commit_label} compact private history summary",
                 guard_passed=False,
                 reason="commit-history exact evidence cannot be summarized",
+            ),
+        ],
+        preservation=_preservation_for(
+            raw_text,
+            raw_text,
+            _work_history_must_preserve(repo_label, commit_label, commit),
+        ),
+        runtime_changes=runtime_changes,
+    )
+
+
+def _public_history_exact_case(
+    repo_label: str,
+    commit_label: str,
+    commit: WorkHistoryCommit,
+    runtime_changes: RuntimeChanges,
+) -> BenchmarkCase:
+    from .adapters import RawAdapter
+
+    raw_text = _work_history_raw_text(repo_label, commit_label, commit)
+    return BenchmarkCase(
+        case_id=f"public-corpus/{repo_label}/{commit_label}/exact-01",
+        lane=Lane.EXACT_EVIDENCE,
+        fixture=f"public-corpus/{repo_label}/{commit_label}/exact-01",
+        metric_family=MetricFamily.REFUSAL_CORRECTNESS,
+        methods=[
+            RawAdapter().measure(raw_text, Lane.EXACT_EVIDENCE),
+            _candidate(
+                "unsafe-summary",
+                Lane.EXACT_EVIDENCE,
+                f"{repo_label} {commit_label} compact public history summary",
+                guard_passed=False,
+                reason="public commit exact evidence cannot be summarized",
             ),
         ],
         preservation=_preservation_for(
@@ -1151,6 +1587,33 @@ def _work_history_code_case(
     )
 
 
+def _public_history_code_case(
+    repo_root: Path,
+    repo_label: str,
+    commit_label: str,
+    code_label: str,
+    commit: WorkHistoryCommit,
+    stat: WorkHistoryFileStat,
+    runtime_changes: RuntimeChanges,
+) -> BenchmarkCase | None:
+    from .adapters import RawAdapter
+
+    text = _run_git(repo_root, ["show", f"{commit.commit}:{stat.path}"], timeout=10)
+    if not text.strip():
+        return None
+    raw = RawAdapter().measure(text, Lane.CODE_GENERATION)
+    baseline = replace(raw, method=BASELINE_CODE_METHOD)
+    return BenchmarkCase(
+        case_id=f"public-corpus/{repo_label}/{commit_label}/{code_label}",
+        lane=Lane.CODE_GENERATION,
+        fixture=f"public-corpus/{repo_label}/{commit_label}/{code_label}",
+        metric_family=MetricFamily.CODE_LENS,
+        methods=[raw, baseline, _work_code_lens_measurement(text)],
+        preservation=PreservationSummary(True),
+        runtime_changes=runtime_changes,
+    )
+
+
 def _work_history_control_case(
     repo_label: str,
     commit_label: str,
@@ -1164,6 +1627,26 @@ def _work_history_control_case(
         case_id=f"work-history/{repo_label}/{commit_label}/control-01",
         lane=Lane.COMMAND_OUTPUT,
         fixture=f"work-history/{repo_label}/{commit_label}/control-01",
+        metric_family=MetricFamily.TOKEN_BEARING,
+        methods=[RawAdapter().measure(raw_text, Lane.COMMAND_OUTPUT)],
+        preservation=PreservationSummary(True),
+        runtime_changes=runtime_changes,
+    )
+
+
+def _public_history_control_case(
+    repo_label: str,
+    commit_label: str,
+    commit: WorkHistoryCommit,
+    runtime_changes: RuntimeChanges,
+) -> BenchmarkCase:
+    from .adapters import RawAdapter
+
+    raw_text = _work_history_raw_text(repo_label, commit_label, commit)
+    return BenchmarkCase(
+        case_id=f"public-corpus/{repo_label}/{commit_label}/control-01",
+        lane=Lane.COMMAND_OUTPUT,
+        fixture=f"public-corpus/{repo_label}/{commit_label}/control-01",
         metric_family=MetricFamily.TOKEN_BEARING,
         methods=[RawAdapter().measure(raw_text, Lane.COMMAND_OUTPUT)],
         preservation=PreservationSummary(True),
@@ -1404,6 +1887,16 @@ def _mutation_guard_failure_case() -> BenchmarkCase:
         preservation=PreservationSummary(True),
         runtime_changes=RuntimeChanges(),
     )
+
+
+def _public_playground_compact_text(
+    text: str,
+    must_preserve: tuple[str, ...],
+) -> str:
+    if not must_preserve:
+        return text
+    status = "pass" if "passed" in text.lower() else "fail" if "error" in text.lower() else "ok"
+    return " ".join([status, *must_preserve])
 
 
 def _candidate(

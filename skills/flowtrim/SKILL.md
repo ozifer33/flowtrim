@@ -27,8 +27,19 @@ Use FlowTrim to choose the smallest safe context path for work-repo tasks.
 
 ## Commands
 
-- Classify a task: `PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_orchestrator.py "task text"`
-- Estimate fixture tokens: `PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py "text"`
+- Classify a task: `flowtrim-classify "task text"`
+- Estimate fixture tokens: `flowtrim-benchmark "text"`
+- Run synthetic proof: `flowtrim-benchmark suite --profile synthetic-heavy --format json`
+- Run public playground proof: `flowtrim-benchmark suite --profile public-playground-readonly --format json`
+- Audit pinned public manifest: `flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json`
+- Prepare pinned public corpus: `flowtrim-benchmark public-corpus prepare --manifest benchmarks/public-corpus/manifest.v1.json --cache-root /tmp/flowtrim-public-corpus`
+- Run pinned public proof: `flowtrim-benchmark suite --profile public-open-source-readonly --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus --format json`
+- Compare Headroom proof: `flowtrim-benchmark compare --baseline-report /tmp/flowtrim-public-baseline.json --candidate-report /tmp/flowtrim-public-headroom.json --focus headroom-direct --format markdown`
+- Check a public claim: `flowtrim-benchmark claim-check --report /tmp/flowtrim-public-baseline.json --claim "On the pinned public corpus, FlowTrim selected a safe lower-token method for measured lanes." --format json`
+- Run privacy gate: `flowtrim-benchmark privacy-scan --tracked --path /tmp/flowtrim-public-baseline.json --format json`
+- Run docs gate: `flowtrim-benchmark docs-check --format json`
+- Run release gate: `flowtrim-benchmark release-check --report /tmp/flowtrim-public-baseline.json --unit-tests-passed --skill-validation-passed --benchmark-smoke-passed --privacy-scan-passed --sanitized-report-present --package-entrypoint-ready --license-reviewed --tool-versions-captured --format markdown`
+- Source checkout fallback: `PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py "text"`
 
 ## Do Not Use When
 

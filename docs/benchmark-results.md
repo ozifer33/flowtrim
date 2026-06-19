@@ -27,9 +27,11 @@ Tool posture:
 | Profile | Corpus type | Cases | Main result | Claim status |
 | --- | --- | ---: | --- | --- |
 | `synthetic-heavy` | Public-safe synthetic fixtures | 14 | 4 measured token-bearing wins, 528 estimated tokens saved, 3 correct raw refusals, 2 code-lens wins | Publishable as fixture evidence |
+| `public-playground-readonly` | Public-safe onboarding scenarios | 7 | Covers noisy logs, exact diff refusal, generated control, code lens, and short raw selection | Publishable as usability smoke evidence |
+| `public-open-source-readonly` | Pinned public open-source commits | 114 | 22 measured token-bearing wins, 2,412 estimated tokens saved, 22 correct raw refusals, 62 code-lens wins | Publishable only as pinned-corpus evidence |
 | `aql-vault-readonly` | Read-only vault decision fixtures | 6 | Vault verdict stayed `hybrid-only`; 4 semantic cases deferred to Atlas context economy | Supports keeping Atlas as vault baseline |
 | `work-code-readonly` | Private local anonymous code sample | 84 | 84 code-lens wins, 0 token-bearing claims | Private local evidence only |
-| `work-commit-history-readonly` | Private local anonymous commit history | 49 | 10 token-bearing wins, 36,649 estimated tokens saved, 10 correct raw refusals, 27 code-lens wins | Private local evidence only |
+| `work-commit-history-readonly` | Private local anonymous commit history | 58 | 10 token-bearing wins, 36,649 estimated tokens saved, 10 correct raw refusals, 36 code-lens wins | Private local evidence only |
 
 These totals are lane-specific. A win in one lane does not imply FlowTrim should
 replace raw output, Atlas context economy, RTK, Ponytail, or Headroom globally.
@@ -101,6 +103,27 @@ Synthetic totals:
   generated LOC removed.
 - `vault-semantic`: 0 cases.
 
+### Public Playground Read-Only
+
+The `public-playground-readonly` profile is an adoption smoke suite. It uses
+public-safe fake logs and code snippets built in memory, so contributors can run
+it without private repositories, public corpus cache preparation, or network
+cloning.
+
+Scenarios tested:
+
+- Python pytest failure log.
+- npm/Vite noisy build pass.
+- TypeScript type error.
+- Git diff/stat exact-evidence refusal.
+- Generated or lock-style control output.
+- Small command where raw must win.
+- Code-lens duplicate abstraction case.
+
+Interpretation: this profile proves onboarding ergonomics and report hygiene. It
+does not replace the pinned public corpus and does not support global benchmark
+claims.
+
 ### Aql Vault Read-Only
 
 The `aql-vault-readonly` profile tests whether FlowTrim should replace the vault
@@ -126,6 +149,33 @@ Interpretation: Atlas remains the default semantic system for vault work. FlowTr
 can still help in narrow command-output or long-context lanes, but the vault
 should keep Atlas packet routing, `llm_brief`, source summaries, generated
 indexes, and approval boundaries as its baseline context economy.
+
+### Public Open-Source Read-Only
+
+The `public-open-source-readonly` profile is the public benchmark corpus. It is
+prepared from pinned Git commits listed in `benchmarks/public-corpus/manifest.v1.json`.
+The prepare step may clone or fetch public repositories into a local cache; the
+benchmark suite itself must run read-only against that cache.
+
+What it tests:
+
+- Public command-output cases from sanitized commit stat/numstat facts.
+- Public code-lens cases from post-commit code blobs, reported only as
+  complexity evidence.
+- Public exact-evidence cases where raw must be selected.
+- Public control cases for generated, lock, vendor, native, or config churn.
+
+Totals from the latest local run:
+
+- `token-bearing`: 26 cases, 22 wins, 2,412 estimated tokens saved, 22 skipped
+  optional Headroom methods.
+- `refusal-correctness`: 22 cases, 22 correct raw refusals.
+- `code-lens`: 66 cases, 62 wins, 192 delete items, 133 duplicate
+  abstractions, 1,414 generated LOC removed, 4 insufficient-evidence cases.
+
+Interpretation: this profile supports claims only for the pinned public corpus
+and measured lanes. It still does not prove FlowTrim globally beats RTK,
+Ponytail, or Headroom.
 
 ### Work Code Read-Only
 
@@ -173,10 +223,10 @@ Totals from the latest local run:
 
 - `token-bearing`: 12 cases, 10 wins, 36,649 estimated tokens saved.
 - `refusal-correctness`: 10 cases, 10 correct refusals.
-- `code-lens`: 27 cases, 27 wins.
-- Delete-list items: 95.
-- Duplicate abstractions: 78.
-- Generated LOC delta: -738.
+- `code-lens`: 36 cases, 36 wins.
+- Delete-list items: 130.
+- Duplicate abstractions: 105.
+- Generated LOC delta: -975.
 
 Interpretation: this supports the private local claim that FlowTrim can find
 command-output and code-lens opportunities in historical Work commits without
@@ -230,10 +280,16 @@ Privacy and non-invasive gates:
 
 ## Reproduction Commands
 
+Install editable package first:
+
+```bash
+python3 -m pip install -e .
+```
+
 Unit and invariant tests:
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests
+python3 -m unittest discover -s tests
 ```
 
 Skill validation:
@@ -245,31 +301,61 @@ uv run --no-project --with PyYAML python <SKILL_CREATOR_QUICK_VALIDATE> skills/f
 Public-safe synthetic proof:
 
 ```bash
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile synthetic-heavy --format json
+flowtrim-benchmark suite --profile synthetic-heavy --format json
+flowtrim-benchmark suite --profile public-playground-readonly --format json
+flowtrim-benchmark docs-check --format json
+flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json
 ```
+
+Pinned public corpus prepare and proof:
+
+```bash
+flowtrim-benchmark public-corpus prepare --manifest benchmarks/public-corpus/manifest.v1.json --cache-root /tmp/flowtrim-public-corpus
+flowtrim-benchmark suite --profile public-open-source-readonly --format json --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus > /tmp/flowtrim-public-baseline.json
+```
+
+Optional Headroom direct proof must stay ephemeral and direct-only:
+
+```bash
+HOME=/tmp/flowtrim-headroom-home XDG_CACHE_HOME=/tmp/flowtrim-headroom-cache HEADROOM_TELEMETRY=off uv run --no-project --with headroom-ai --with-editable . python -m flowtrim.cli.benchmark suite --profile public-open-source-readonly --format json --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus > /tmp/flowtrim-public-headroom.json
+flowtrim-benchmark compare --baseline-report /tmp/flowtrim-public-baseline.json --candidate-report /tmp/flowtrim-public-headroom.json --focus headroom-direct --format markdown
+```
+
+Public alpha gates:
+
+```bash
+flowtrim-benchmark claim-check --report /tmp/flowtrim-public-baseline.json --claim "On the pinned public corpus, FlowTrim selected a safe lower-token method for measured lanes." --format json
+flowtrim-benchmark privacy-scan --tracked --path /tmp/flowtrim-public-baseline.json --format json
+flowtrim-benchmark release-check --report /tmp/flowtrim-public-baseline.json --unit-tests-passed --skill-validation-passed --benchmark-smoke-passed --privacy-scan-passed --sanitized-report-present --package-entrypoint-ready --license-reviewed --tool-versions-captured --format markdown
+```
+
+These gates are designed for public release hygiene. `claim-check` rejects
+overclaims, `privacy-scan` rejects findings without printing local paths, and
+`release-check` keeps release evidence explicit instead of assuming tests,
+skill validation, license review, or tool-version evidence happened.
 
 Vault proof with a local vault path:
 
 ```bash
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
+flowtrim-benchmark suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
 ```
 
 Private Work code-lens proof:
 
 ```bash
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
+flowtrim-benchmark suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
 ```
 
 Private Work commit-history proof:
 
 ```bash
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
+flowtrim-benchmark suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
 ```
 
 Privacy scan over tracked and untracked public repo files:
 
 ```bash
-PYTHONPATH=src python3 - <<'PY'
+python3 - <<'PY'
 from pathlib import Path
 import subprocess
 from flowtrim.privacy import scan_text
@@ -317,6 +403,8 @@ Forbidden:
 - FlowTrim is a global benchmark.
 - FlowTrim globally beats RTK, Ponytail, or Headroom.
 - Headroom lost when it was skipped because unavailable.
+- Headroom lost when it was skipped because no safe direct runner was available.
+- Headroom direct won globally from a pinned-corpus result.
 - Ponytail saved tokens without generated-token measurement.
 - The vault is FlowTrim-safe while the verdict remains `hybrid-only`.
 - Any claim that names private repos, exposes commit messages, quotes source, or
@@ -324,8 +412,19 @@ Forbidden:
 
 ## Public Release Gap
 
-The remaining gap for public/global comparison is a separate
-`public-open-source-readonly` corpus. That corpus should use only public repos,
-public commits, and publishable reports. Until then, FlowTrim can publish
-synthetic fixture evidence and describe private Work runs only as local,
-anonymous, aggregate evidence.
+The public corpus closes the first public-evidence gap, but not the global
+benchmark gap. Global claims still require a broader, representative corpus,
+clear weighting rules, and Headroom direct measurements from an installed safe
+direct runner. Until then, FlowTrim can publish synthetic fixture evidence,
+pinned public-corpus evidence, and private Work runs only as local, anonymous,
+aggregate evidence.
+
+## Headroom Decision Rules
+
+- If Headroom remains skipped, document unavailable/skipped behavior only.
+- If Headroom measures but has zero safe wins, keep it as an optional baseline.
+- If Headroom wins measured public-corpus lanes safely, allow it only as a
+  lane-specific optional backend for those lanes.
+- If Headroom emits marker-only output without retrieval, changes runtime state,
+  stores raw output, or fails privacy gates, block adoption and require a
+  retrieval-path proof before retesting.

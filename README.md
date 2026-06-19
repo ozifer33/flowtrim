@@ -11,7 +11,9 @@ FlowTrim routes each flow through the smallest safe context path:
 
 ## Status
 
-FlowTrim starts as a local proof of concept. It should not be published, installed globally, or used on private Work repositories until its fixture tests, privacy scan, and sanitized benchmark gates pass.
+FlowTrim is a public alpha candidate. It is ready for local install, public-safe
+proof runs, docs checks, privacy gates, and pinned-corpus experiments, but it
+must not claim global wins over RTK, Ponytail, or Headroom.
 
 ## Safety Rules
 
@@ -22,9 +24,11 @@ FlowTrim starts as a local proof of concept. It should not be published, install
 
 ## Benchmark Lab
 
-FlowTrim includes four benchmark profiles:
+FlowTrim includes six benchmark profiles:
 
 - `synthetic-heavy`: public-safe fixtures covering command output, long context, exact evidence, code-generation pressure, and adversarial checks.
+- `public-playground-readonly`: public-safe onboarding scenarios that require no private repos and no network clone.
+- `public-open-source-readonly`: pinned public open-source commit-history corpus. It uses public repos prepared into a local cache, then runs read-only against aliases and aggregate stats only.
 - `aql-vault-readonly`: read-only Aql Atlas decision fixtures. The expected default verdict is `hybrid-only`, because Atlas packet, `llm_brief`, source summaries, and generated indexes remain the semantic vault context economy.
 - `work-code-readonly`: read-only code-lens analysis for private Work repos. Reports use anonymous repo/file labels plus hashes and aggregate metrics only; raw code, repo names, and local paths must not appear in JSON.
   It selects high-signal files for stress testing, so aggregate delete-list and LOC-delta numbers are not average prevalence estimates.
@@ -34,6 +38,9 @@ FlowTrim's first native challenger is `flowtrim-native-command`, a clean-room
 command-output packetizer. RTK remains an optional baseline/backend: FlowTrim may
 select RTK when it wins safely, but native command output can become selected
 when it preserves required facts and beats both raw and RTK in the measured case.
+Headroom is optional: FlowTrim only tests direct read-only compression when a
+safe direct runner is available. It never enables `headroom wrap`, proxy, MCP,
+memory, learning, or config writes as part of the benchmark.
 
 The Work profile defaults to a `9 x 12` high-signal sample: nine repositories and
 twelve code files per repository. Use smaller limits only for quick local smoke
@@ -42,13 +49,38 @@ checks.
 Run:
 
 ```bash
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile synthetic-heavy --format json
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
+python3 -m pip install -e .
+flowtrim-benchmark suite --profile synthetic-heavy --format json
+flowtrim-benchmark suite --profile public-playground-readonly --format json
+flowtrim-benchmark docs-check --format json
+flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json
+flowtrim-benchmark public-corpus prepare --manifest benchmarks/public-corpus/manifest.v1.json --cache-root /tmp/flowtrim-public-corpus
+flowtrim-benchmark suite --profile public-open-source-readonly --format json --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus
+flowtrim-benchmark compare --baseline-report /tmp/flowtrim-public-baseline.json --candidate-report /tmp/flowtrim-public-headroom.json --focus headroom-direct --format markdown
+flowtrim-benchmark claim-check --report /tmp/flowtrim-public-baseline.json --claim "On the pinned public corpus, FlowTrim selected a safe lower-token method for measured lanes." --format json
+flowtrim-benchmark privacy-scan --tracked --path /tmp/flowtrim-public-baseline.json --format json
+flowtrim-benchmark release-check --report /tmp/flowtrim-public-baseline.json --unit-tests-passed --skill-validation-passed --benchmark-smoke-passed --privacy-scan-passed --sanitized-report-present --package-entrypoint-ready --license-reviewed --tool-versions-captured --format markdown
+flowtrim-benchmark suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
+flowtrim-benchmark suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
+flowtrim-benchmark suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
+```
+
+## Source-Checkout Fallback
+
+Before installing editable package:
+
+```bash
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py "abcd"
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_orchestrator.py "npm test produced a long build log"
 ```
 
 Allowed claims are lane-specific: FlowTrim may say it selected a safe lower-token method for a measured lane, or that it correctly chose raw when compression was unsafe, slower, or not cheaper. It must not claim that it globally beats RTK, Ponytail, or Headroom. Headroom is reported as skipped when unavailable, not as a loss. Ponytail-style results are complexity-reduction evidence, not direct token compression unless generated text size is measured separately.
+
+The public alpha gates are command-line checks with release-friendly exit codes:
+`claim-check` returns non-zero for overclaims, `privacy-scan` returns non-zero
+when findings exist, and `release-check` returns non-zero while required
+evidence is missing. Gate outputs are aggregate-only and do not print report
+paths, cache roots, source text, or raw diffs.
 
 ## Proof Test Matrix
 
@@ -63,8 +95,9 @@ The acceptance suite in `tests/test_proof_matrix.py` locks the proof plan:
   `hybrid-only`,
 - Work reports stay anonymous and aggregate-only.
 
-Before publishing any public comparison, add a public/open-source readonly corpus;
-private Work measurements are local evidence only.
+Public comparison claims are limited to the pinned public corpus and measured
+lanes. Private Work measurements remain local evidence only. FlowTrim still must
+not claim global wins over RTK, Ponytail, or Headroom.
 
 The private commit-history profile can support only local/private claim language:
 "private local evidence from historical Work commits" and "generated/lock-heavy
@@ -78,7 +111,7 @@ each profile tests, acceptance gates, result totals, and claim boundaries, see
 Run the proof matrix directly:
 
 ```bash
-PYTHONPATH=src python3 -m unittest tests.test_proof_matrix
+python3 -m unittest tests.test_proof_matrix
 ```
 
 ## Local Verification
@@ -86,15 +119,26 @@ PYTHONPATH=src python3 -m unittest tests.test_proof_matrix
 Run:
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests
+python3 -m unittest discover -s tests
 uv run --no-project --with PyYAML python <SKILL_CREATOR_QUICK_VALIDATE> skills/flowtrim
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_orchestrator.py "npm test produced a long build log"
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py "abcd"
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile synthetic-heavy --format json
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
-PYTHONPATH=src python3 - <<'PY'
+python3 -m pip install -e .
+flowtrim-classify "npm test produced a long build log"
+flowtrim-benchmark "abcd"
+flowtrim-benchmark suite --profile synthetic-heavy --format json
+flowtrim-benchmark suite --profile public-playground-readonly --format json
+flowtrim-benchmark docs-check --format json
+flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json
+flowtrim-benchmark public-corpus prepare --manifest benchmarks/public-corpus/manifest.v1.json --cache-root /tmp/flowtrim-public-corpus
+flowtrim-benchmark suite --profile public-open-source-readonly --format json --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus
+HOME=/tmp/flowtrim-headroom-home XDG_CACHE_HOME=/tmp/flowtrim-headroom-cache HEADROOM_TELEMETRY=off uv run --no-project --with headroom-ai --with-editable . python -m flowtrim.cli.benchmark suite --profile public-open-source-readonly --format json --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus
+flowtrim-benchmark compare --baseline-report /tmp/flowtrim-public-baseline.json --candidate-report /tmp/flowtrim-public-headroom.json --focus headroom-direct --format markdown
+flowtrim-benchmark claim-check --report /tmp/flowtrim-public-baseline.json --claim "On the pinned public corpus, FlowTrim selected a safe lower-token method for measured lanes." --format json
+flowtrim-benchmark privacy-scan --tracked --path /tmp/flowtrim-public-baseline.json --format json
+flowtrim-benchmark release-check --report /tmp/flowtrim-public-baseline.json --unit-tests-passed --skill-validation-passed --benchmark-smoke-passed --privacy-scan-passed --sanitized-report-present --package-entrypoint-ready --license-reviewed --tool-versions-captured --format markdown
+flowtrim-benchmark suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
+flowtrim-benchmark suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
+flowtrim-benchmark suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
+python3 - <<'PY'
 from pathlib import Path
 from flowtrim.privacy import scan_text
 bad = []
