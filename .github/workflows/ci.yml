@@ -55,6 +55,7 @@ jobs:
           flowtrim-benchmark docs-check --format json
           flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json
           flowtrim-benchmark doctor --format json
+          flowtrim-benchmark install-check --format json
 
       - name: Claim gates
         run: |

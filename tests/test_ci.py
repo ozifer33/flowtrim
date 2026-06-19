@@ -23,6 +23,7 @@ class CiWorkflowTest(unittest.TestCase):
         self.assertIn("flowtrim-benchmark docs-check --format json", text)
         self.assertIn("flowtrim-benchmark public-corpus audit", text)
         self.assertIn("flowtrim-benchmark doctor --format json", text)
+        self.assertIn("flowtrim-benchmark install-check --format json", text)
         self.assertIn("flowtrim-benchmark claim-check", text)
         self.assertIn("flowtrim-classify", text)
         self.assertIn("actions/setup-node@v4", text)

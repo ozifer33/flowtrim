@@ -24,36 +24,23 @@ and [docs/benchmark-results.md](docs/benchmark-results.md).
 
 ## Install
 
-Install the Python CLI:
+Official install path: Codex.
 
 ```bash
 git clone https://github.com/ozifer33/flowtrim.git
 cd flowtrim
 python3 -m pip install .
+node scripts/flowtrim-skill-install.mjs --agent codex --scope user
 flowtrim-benchmark doctor --format json
 ```
 
-Install the skill for Claude Code:
-
-```text
-/plugin marketplace add ozifer33/flowtrim
-/plugin install flowtrim@flowtrim
-```
-
-Install the skill for Codex with the optional Node convenience installer:
+For project-local Codex install:
 
 ```bash
-npx github:ozifer33/flowtrim --agent codex --scope user
+node scripts/flowtrim-skill-install.mjs --agent codex --scope project --project .
 ```
 
-Install manually for a project:
-
-```bash
-mkdir -p .agents/skills
-cp -R /path/to/flowtrim/skills/flowtrim .agents/skills/flowtrim
-```
-
-More install paths, including GitHub Copilot and manual skill directories, are in
+Other agent paths are compatibility notes, not primary install claims. See
 [docs/install.md](docs/install.md).
 
 ## How It Works

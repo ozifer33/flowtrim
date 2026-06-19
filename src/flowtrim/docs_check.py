@@ -15,6 +15,7 @@ REQUIRED_PUBLIC_DOCS = (
     "SECURITY.md",
     "CHANGELOG.md",
     "docs/install.md",
+    "docs/install-verification.md",
     "docs/benchmark-results.md",
     "docs/assets/flowtrim-public-alpha-benchmark.svg",
     "benchmarks/results/2026-06-19-public-alpha.md",

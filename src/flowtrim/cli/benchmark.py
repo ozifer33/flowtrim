@@ -32,6 +32,11 @@ from flowtrim.docs_check import (
     docs_check_to_markdown,
 )
 from flowtrim.doctor import doctor_payload, doctor_to_json, doctor_to_markdown
+from flowtrim.install_check import (
+    install_check_payload,
+    install_check_to_json,
+    install_check_to_markdown,
+)
 from flowtrim.metrics import estimate_tokens
 from flowtrim.public_corpus import (
     DEFAULT_PUBLIC_CACHE_ROOT,
@@ -237,6 +242,34 @@ def main(argv: list[str] | None = None) -> int:
             doctor_to_json(payload)
             if args.format == "json"
             else doctor_to_markdown(payload)
+        )
+        print(output)
+        return 0 if payload["valid"] else 1
+
+    if argv[:1] == ["install-check"]:
+        parser = argparse.ArgumentParser(
+            description="Run aggregate FlowTrim install verification checks."
+        )
+        parser.add_argument("command")
+        parser.add_argument("--tmp-root", default="/tmp/flowtrim-install-check")
+        parser.add_argument("--clean-clone-url")
+        parser.add_argument("--run-npx", action="store_true")
+        parser.add_argument("--run-gh-skill", action="store_true")
+        parser.add_argument("--run-claude-plugin", action="store_true")
+        parser.add_argument("--format", choices=("json", "markdown"), default="json")
+        args = parser.parse_args(argv)
+        payload = install_check_payload(
+            Path.cwd(),
+            tmp_root=args.tmp_root,
+            clean_clone_url=args.clean_clone_url,
+            run_npx=args.run_npx,
+            run_gh_skill=args.run_gh_skill,
+            run_claude_plugin=args.run_claude_plugin,
+        )
+        output = (
+            install_check_to_json(payload)
+            if args.format == "json"
+            else install_check_to_markdown(payload)
         )
         print(output)
         return 0 if payload["valid"] else 1

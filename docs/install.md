@@ -1,129 +1,91 @@
 # FlowTrim Install Guide
 
+Official install path: Codex.
+
 FlowTrim has two parts:
 
 - a Python CLI: `flowtrim-benchmark` and `flowtrim-classify`
-- an agent skill folder: `skills/flowtrim`
+- a Codex skill folder: `skills/flowtrim`
 
-Install the CLI when you want to run benchmark gates. Install the skill when you
-want an agent to use the FlowTrim lane policy while working.
+Use the CLI for benchmark gates. Use the skill when you want Codex to apply the
+FlowTrim lane policy while working.
 
-## Python CLI
+## Official Codex Install
+
+User-level Codex install:
 
 ```bash
 git clone https://github.com/ozifer33/flowtrim.git
 cd flowtrim
 python3 -m pip install .
+node scripts/flowtrim-skill-install.mjs --agent codex --scope user
 flowtrim-benchmark doctor --format json
+```
+
+Project-local Codex install:
+
+```bash
+git clone https://github.com/ozifer33/flowtrim.git
+cd flowtrim
+python3 -m pip install .
+node scripts/flowtrim-skill-install.mjs --agent codex --scope project --project /path/to/project
 ```
 
 Expected: `doctor` returns `valid: true`.
 
-## Claude Code
+## Manual Codex Fallback
 
-Claude Code can install FlowTrim as a plugin marketplace:
-
-```text
-/plugin marketplace add ozifer33/flowtrim
-/plugin install flowtrim@flowtrim
-```
-
-Plugin invocation is namespaced:
-
-```text
-/flowtrim:flowtrim
-```
-
-Manual project install:
-
-```bash
-mkdir -p .claude/skills
-cp -R /path/to/flowtrim/skills/flowtrim .claude/skills/flowtrim
-```
-
-Manual user install:
-
-```bash
-mkdir -p "$HOME/.claude/skills"
-cp -R /path/to/flowtrim/skills/flowtrim "$HOME/.claude/skills/flowtrim"
-```
-
-## Codex
-
-The `npx` path is a convenience installer, not a universal requirement. Use it
-only when Node is available:
-
-```bash
-npx github:ozifer33/flowtrim --agent codex --scope user
-```
-
-Manual user install:
+If Node is unavailable, copy the skill folder manually:
 
 ```bash
 mkdir -p "$HOME/.agents/skills"
 cp -R /path/to/flowtrim/skills/flowtrim "$HOME/.agents/skills/flowtrim"
 ```
 
-Manual project install:
+Project-local fallback:
 
 ```bash
 mkdir -p .agents/skills
 cp -R /path/to/flowtrim/skills/flowtrim .agents/skills/flowtrim
 ```
 
-## GitHub Copilot
+Minimum installed files:
 
-Copilot can use repository skills and repository instructions. Prefer a project
-install for teams:
+- `SKILL.md`
+- `references/lane-policy.md`
+- `references/benchmark-gates.md`
+- `references/safety-rules.md`
+- `scripts/flowtrim_benchmark.py`
+- `scripts/flowtrim_orchestrator.py`
+- `agents/openai.yaml`
 
-```bash
-npx github:ozifer33/flowtrim --agent copilot --scope project --project .
-```
+## Not The Official Path
 
-Manual project install:
+`npx is not the official install path` for FlowTrim yet. It remains an optional
+experiment because the current local proof found that older `npx`/npm versions
+can timeout or fail on `github:ozifer33/flowtrim`.
 
-```bash
-mkdir -p .github/skills
-cp -R /path/to/flowtrim/skills/flowtrim .github/skills/flowtrim
-cp /path/to/flowtrim/.github/copilot-instructions.md .github/copilot-instructions.md
-```
-
-If your `gh` version supports skill installation, inspect before installing:
-
-```bash
-gh skill preview ozifer33/flowtrim flowtrim
-gh skill install ozifer33/flowtrim flowtrim
-```
-
-## Convenience Installer
-
-The Node installer supports only verified first-class targets:
+These commands are compatibility experiments only:
 
 ```bash
-npx github:ozifer33/flowtrim --agent claude --scope user
 npx github:ozifer33/flowtrim --agent codex --scope user
+npx github:ozifer33/flowtrim --agent claude --scope user
 npx github:ozifer33/flowtrim --agent copilot --scope project --project .
 ```
 
-Options:
+Do not claim them as verified until `flowtrim-benchmark install-check --run-npx`
+passes in the target environment.
 
-- `--agent claude|codex|copilot`
-- `--scope user|project`
-- `--project <path>`
-- `--dry-run`
-- `--force`
+## Optional compatibility notes
 
-It copies only the FlowTrim skill allowlist: `SKILL.md`, `references/`,
-`scripts/`, and `agents/`. It refuses to overwrite an existing install unless
-`--force` is present.
-
-## Manual Path Matrix
+FlowTrim keeps metadata for future agent support, but Codex is the only official
+install path in this public alpha.
 
 | Tool | Project path | User path | Status |
 | --- | --- | --- | --- |
-| Claude Code | `.claude/skills/` | `~/.claude/skills/` | verified install path |
-| Codex | `.agents/skills/` | `~/.agents/skills/` | verified install path |
-| GitHub Copilot | `.github/skills/` | `~/.copilot/skills/` | verified install path |
+| Codex | `.agents/skills/` | `~/.agents/skills/` | official install path |
+| Claude Code | `.claude/skills/` | `~/.claude/skills/` | needs verification |
+| GitHub Copilot | `.github/skills/` | `~/.copilot/skills/` | needs verification |
 | Cursor | `.cursor/skills/` | `~/.cursor/skills/` | needs verification |
 | Gemini CLI | `.gemini/skills/` | `~/.gemini/skills/` | needs verification |
 | Antigravity | `.agent/skills/` | `~/.gemini/antigravity/skills/` | needs verification |
@@ -141,6 +103,7 @@ After installing the CLI:
 flowtrim-benchmark abcd
 flowtrim-classify "npm test produced a long build log"
 flowtrim-benchmark doctor --format json
+flowtrim-benchmark install-check --format json
 ```
 
 Expected:
@@ -148,3 +111,7 @@ Expected:
 - `flowtrim-benchmark abcd` prints `1`
 - classifier prints `command-output`
 - doctor reports `valid: true`
+- install-check reports `flowtrim-install-check/v1`
+
+See `docs/install-verification.md` for what is automated, skipped-neutral, or
+still manual.

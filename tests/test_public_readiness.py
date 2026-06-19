@@ -22,6 +22,7 @@ REQUIRED_PUBLIC_DOCS = (
     "SECURITY.md",
     "CHANGELOG.md",
     "docs/install.md",
+    "docs/install-verification.md",
     "docs/assets/flowtrim-public-alpha-benchmark.svg",
     "benchmarks/results/2026-06-19-public-alpha.md",
 )
@@ -70,19 +71,31 @@ class PublicReadinessTest(unittest.TestCase):
         self.assertIn("| Profile | Cases | Token wins | Tokens saved | Raw refusals | Code-lens wins | Claim boundary |", readme)
         self.assertIn("docs/install.md", readme)
         self.assertIn("No global benchmark claim", readme)
+        self.assertIn("Official install path: Codex", readme)
+        self.assertIn("node scripts/flowtrim-skill-install.mjs --agent codex --scope user", readme)
+        self.assertNotIn("/plugin marketplace add", readme)
         self.assertNotIn("flowtrim-benchmark suite --profile aql-vault-readonly", readme)
         self.assertNotIn("flowtrim-benchmark suite --profile work-code-readonly", readme)
 
     def test_install_docs_have_native_and_convenience_paths(self):
         text = (ROOT / "docs" / "install.md").read_text(encoding="utf-8")
 
-        self.assertIn("/plugin marketplace add ozifer33/flowtrim", text)
-        self.assertIn("/plugin install flowtrim@flowtrim", text)
-        self.assertIn("npx github:ozifer33/flowtrim --agent codex --scope user", text)
+        self.assertIn("Official install path: Codex", text)
+        self.assertIn("node scripts/flowtrim-skill-install.mjs --agent codex --scope user", text)
+        self.assertIn("npx is not the official install path", text)
+        self.assertNotIn("/plugin marketplace add ozifer33/flowtrim", text)
         self.assertIn(".agents/skills", text)
-        self.assertIn(".github/skills", text)
-        self.assertIn("convenience installer", text)
+        self.assertIn("Optional compatibility notes", text)
         self.assertIn("needs verification", text)
+
+    def test_install_verification_docs_define_claim_statuses(self):
+        text = (ROOT / "docs" / "install-verification.md").read_text(encoding="utf-8")
+
+        self.assertIn("flowtrim-install-check/v1", text)
+        self.assertIn("skipped-neutral", text)
+        self.assertIn("Claude Code plugin", text)
+        self.assertIn("GitHub Copilot skill", text)
+        self.assertIn("not verified", text)
 
     def test_docs_check_accepts_repo_docs(self):
         result = run_cli("docs-check", "--format", "json")
