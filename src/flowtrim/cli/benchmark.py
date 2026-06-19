@@ -23,6 +23,7 @@ from flowtrim.docs_check import (
     docs_check_to_json,
     docs_check_to_markdown,
 )
+from flowtrim.doctor import doctor_payload, doctor_to_json, doctor_to_markdown
 from flowtrim.metrics import estimate_tokens
 from flowtrim.public_corpus import (
     DEFAULT_PUBLIC_CACHE_ROOT,
@@ -212,6 +213,22 @@ def main(argv: list[str] | None = None) -> int:
             docs_check_to_json(payload)
             if args.format == "json"
             else docs_check_to_markdown(payload)
+        )
+        print(output)
+        return 0 if payload["valid"] else 1
+
+    if argv[:1] == ["doctor"]:
+        parser = argparse.ArgumentParser(description="Run aggregate FlowTrim public readiness checks.")
+        parser.add_argument("command")
+        parser.add_argument("--root", default=".")
+        parser.add_argument("--skill-root", default="skills/flowtrim")
+        parser.add_argument("--format", choices=("json", "markdown"), default="json")
+        args = parser.parse_args(argv)
+        payload = doctor_payload(args.root, skill_root=args.skill_root)
+        output = (
+            doctor_to_json(payload)
+            if args.format == "json"
+            else doctor_to_markdown(payload)
         )
         print(output)
         return 0 if payload["valid"] else 1

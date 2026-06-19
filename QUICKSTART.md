@@ -39,7 +39,12 @@ flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manif
 flowtrim-benchmark privacy-scan --tracked --format json
 flowtrim-benchmark docs-check --format json
 flowtrim-benchmark skill-check --skill-root skills/flowtrim --format json
+flowtrim-benchmark doctor --format json
 ```
+
+`doctor` is the one-command public alpha health check. It summarizes package
+metadata, CLI smoke behavior, docs, skill shape, privacy scan, public corpus
+manifest audit, and public playground proof without printing local paths.
 
 Claims should be checked against a generated report:
 

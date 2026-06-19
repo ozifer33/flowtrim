@@ -38,6 +38,7 @@ Use FlowTrim to choose the smallest safe context path for work-repo tasks.
 - Check a public claim: `flowtrim-benchmark claim-check --report /tmp/flowtrim-public-baseline.json --claim "On the pinned public corpus, FlowTrim selected a safe lower-token method for measured lanes." --format json`
 - Run privacy gate: `flowtrim-benchmark privacy-scan --tracked --path /tmp/flowtrim-public-baseline.json --format json`
 - Run docs gate: `flowtrim-benchmark docs-check --format json`
+- Run public readiness doctor: `flowtrim-benchmark doctor --format json`
 - Run release gate: `flowtrim-benchmark release-check --report /tmp/flowtrim-public-baseline.json --unit-tests-passed --skill-validation-passed --benchmark-smoke-passed --privacy-scan-passed --sanitized-report-present --package-entrypoint-ready --license-reviewed --tool-versions-captured --format markdown`
 - Source checkout fallback: `PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py "text"`
 

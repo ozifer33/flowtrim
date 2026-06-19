@@ -515,6 +515,65 @@ class CliTest(unittest.TestCase):
         self.assertEqual(data["findings"][0]["target"], "skill-root")
         self.assertNotIn(str(root), result.stdout)
 
+    def test_doctor_cli_summarizes_public_readiness_without_path_leak(self):
+        result = run_cli("doctor", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["schema"], "flowtrim-doctor/v1")
+        self.assertTrue(data["valid"])
+        names = {check["name"] for check in data["checks"]}
+        self.assertEqual(
+            names,
+            {
+                "package-metadata",
+                "benchmark-smoke",
+                "classify-smoke",
+                "docs-check",
+                "skill-check",
+                "privacy-scan",
+                "public-corpus-audit",
+                "public-playground",
+            },
+        )
+        self.assertNotIn(str(ROOT), result.stdout)
+        self.assertNotIn("/" + "Users" + "/", result.stdout)
+
+    def test_doctor_cli_fails_clear_gate_without_temp_path_leak(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            skill_root = root / "bad-skill"
+            skill_root.mkdir()
+            (skill_root / "SKILL.md").write_text(
+                "---\nname: bad\n---\n# Bad Skill\n\n## Commands\n",
+                encoding="utf-8",
+            )
+
+            result = run_cli(
+                "doctor",
+                "--skill-root",
+                str(skill_root),
+                "--format",
+                "json",
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["schema"], "flowtrim-doctor/v1")
+        self.assertFalse(data["valid"])
+        checks = {check["name"]: check for check in data["checks"]}
+        self.assertFalse(checks["skill-check"]["valid"])
+        self.assertIn("skill finding", checks["skill-check"]["summary"])
+        self.assertNotIn(str(root), result.stdout)
+
+    def test_doctor_markdown_is_aggregate_only(self):
+        result = run_cli("doctor", "--format", "markdown")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("# FlowTrim Doctor", result.stdout)
+        self.assertIn("public-playground: pass", result.stdout)
+        self.assertNotIn(str(ROOT), result.stdout)
+
     def test_suite_markdown_mode_omits_raw_private_output(self):
         result = run_cli("suite", "--profile", "aql-vault-readonly", "--format", "markdown")
 

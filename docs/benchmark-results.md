@@ -305,6 +305,7 @@ flowtrim-benchmark suite --profile synthetic-heavy --format json
 flowtrim-benchmark suite --profile public-playground-readonly --format json
 flowtrim-benchmark docs-check --format json
 flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json
+flowtrim-benchmark doctor --format json
 ```
 
 Pinned public corpus prepare and proof:
@@ -333,6 +334,8 @@ These gates are designed for public release hygiene. `claim-check` rejects
 overclaims, `privacy-scan` rejects findings without printing local paths, and
 `release-check` keeps release evidence explicit instead of assuming tests,
 skill validation, license review, or tool-version evidence happened.
+`doctor` is a read-only aggregate health check for package metadata, CLI smoke,
+docs, skill shape, privacy scan, public manifest audit, and playground proof.
 
 Vault proof with a local vault path:
 

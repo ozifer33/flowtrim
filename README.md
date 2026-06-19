@@ -54,6 +54,7 @@ flowtrim-benchmark suite --profile synthetic-heavy --format json
 flowtrim-benchmark suite --profile public-playground-readonly --format json
 flowtrim-benchmark docs-check --format json
 flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json
+flowtrim-benchmark doctor --format json
 flowtrim-benchmark public-corpus prepare --manifest benchmarks/public-corpus/manifest.v1.json --cache-root /tmp/flowtrim-public-corpus
 flowtrim-benchmark suite --profile public-open-source-readonly --format json --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus
 flowtrim-benchmark compare --baseline-report /tmp/flowtrim-public-baseline.json --candidate-report /tmp/flowtrim-public-headroom.json --focus headroom-direct --format markdown
@@ -81,6 +82,8 @@ The public alpha gates are command-line checks with release-friendly exit codes:
 when findings exist, and `release-check` returns non-zero while required
 evidence is missing. Gate outputs are aggregate-only and do not print report
 paths, cache roots, source text, or raw diffs.
+`doctor` runs the public readiness smoke checks as one aggregate, read-only
+health check.
 
 ## Proof Test Matrix
 
@@ -128,6 +131,7 @@ flowtrim-benchmark suite --profile synthetic-heavy --format json
 flowtrim-benchmark suite --profile public-playground-readonly --format json
 flowtrim-benchmark docs-check --format json
 flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json
+flowtrim-benchmark doctor --format json
 flowtrim-benchmark public-corpus prepare --manifest benchmarks/public-corpus/manifest.v1.json --cache-root /tmp/flowtrim-public-corpus
 flowtrim-benchmark suite --profile public-open-source-readonly --format json --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus
 HOME=/tmp/flowtrim-headroom-home XDG_CACHE_HOME=/tmp/flowtrim-headroom-cache HEADROOM_TELEMETRY=off uv run --no-project --with headroom-ai --with-editable . python -m flowtrim.cli.benchmark suite --profile public-open-source-readonly --format json --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus

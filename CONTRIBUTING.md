@@ -18,6 +18,7 @@ flowtrim-benchmark suite --profile public-playground-readonly --format json
 flowtrim-benchmark privacy-scan --tracked --format json
 flowtrim-benchmark docs-check --format json
 flowtrim-benchmark skill-check --skill-root skills/flowtrim --format json
+flowtrim-benchmark doctor --format json
 ```
 
 ## Privacy Rules
