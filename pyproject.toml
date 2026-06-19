@@ -31,9 +31,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/atichart/flowtrim"
-Repository = "https://github.com/atichart/flowtrim"
-"Issue Tracker" = "https://github.com/atichart/flowtrim/issues"
+Homepage = "https://github.com/ozifer33/flowtrim"
+Repository = "https://github.com/ozifer33/flowtrim"
+"Issue Tracker" = "https://github.com/ozifer33/flowtrim/issues"
 
 [project.scripts]
 flowtrim-benchmark = "flowtrim.cli.benchmark:main"

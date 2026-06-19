@@ -34,6 +34,7 @@ Use FlowTrim to choose the smallest safe context path for work-repo tasks.
 - Audit pinned public manifest: `flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json`
 - Prepare pinned public corpus: `flowtrim-benchmark public-corpus prepare --manifest benchmarks/public-corpus/manifest.v1.json --cache-root /tmp/flowtrim-public-corpus`
 - Run pinned public proof: `flowtrim-benchmark suite --profile public-open-source-readonly --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus --format json`
+- Run private dogfood proof: `flowtrim-benchmark suite --profile work-dogfood-readonly --work-repo <WORK_REPO> --work-group <TICKET_OR_GROUP> --format json`
 - Compare Headroom proof: `flowtrim-benchmark compare --baseline-report /tmp/flowtrim-public-baseline.json --candidate-report /tmp/flowtrim-public-headroom.json --focus headroom-direct --format markdown`
 - Check a public claim: `flowtrim-benchmark claim-check --report /tmp/flowtrim-public-baseline.json --claim "On the pinned public corpus, FlowTrim selected a safe lower-token method for measured lanes." --format json`
 - Run privacy gate: `flowtrim-benchmark privacy-scan --tracked --path /tmp/flowtrim-public-baseline.json --format json`

@@ -15,6 +15,127 @@ FlowTrim is a public alpha candidate. It is ready for local install, public-safe
 proof runs, docs checks, privacy gates, and pinned-corpus experiments, but it
 must not claim global wins over RTK, Ponytail, or Headroom.
 
+## Quick Start
+
+Requires Python `3.11+`.
+
+```bash
+git clone https://github.com/ozifer33/flowtrim.git
+cd flowtrim
+python3 -m pip install -e .
+flowtrim-benchmark doctor --format json
+```
+
+Expected result: `doctor` returns `valid: true`.
+
+## Install
+
+FlowTrim has two install surfaces:
+
+- Python CLI entrypoints: `flowtrim-benchmark` and `flowtrim-classify`.
+- Agent instructions: the `skills/flowtrim` skill folder, plus a GitHub Copilot
+  instruction template.
+
+### Python CLI
+
+Install from a checkout:
+
+```bash
+git clone https://github.com/ozifer33/flowtrim.git
+cd flowtrim
+python3 -m pip install .
+flowtrim-benchmark "abcd"
+flowtrim-classify "npm test produced a long build log"
+```
+
+Or install editable for development:
+
+```bash
+python3 -m pip install -e .
+flowtrim-benchmark doctor --format json
+```
+
+### Claude Code
+
+Claude Code can load local skills from a `skills/<name>/SKILL.md` directory.
+Install FlowTrim as a user skill:
+
+```bash
+git clone https://github.com/ozifer33/flowtrim.git
+cd flowtrim
+mkdir -p "$HOME/.claude/skills"
+cp -R skills/flowtrim "$HOME/.claude/skills/flowtrim"
+```
+
+For a project-only install, copy the same folder into the target repo:
+
+```bash
+mkdir -p .claude/skills
+cp -R /path/to/flowtrim/skills/flowtrim .claude/skills/flowtrim
+```
+
+Then ask Claude Code to use FlowTrim for noisy command output, code-generation,
+long-context, or exact-evidence decisions.
+
+### Codex
+
+Codex can load local skills from `$HOME/.agents/skills`. Install FlowTrim as a
+user skill:
+
+```bash
+git clone https://github.com/ozifer33/flowtrim.git
+cd flowtrim
+mkdir -p "$HOME/.agents/skills"
+cp -R skills/flowtrim "$HOME/.agents/skills/flowtrim"
+```
+
+The CLI can be installed in the same checkout:
+
+```bash
+python3 -m pip install -e .
+flowtrim-benchmark doctor --format json
+```
+
+### GitHub Copilot
+
+GitHub Copilot does not run FlowTrim as an executable skill by itself. Use the
+instruction template for repository-level guidance, and install the Python CLI
+if local benchmark commands are needed:
+
+```bash
+mkdir -p .github
+cp /path/to/flowtrim/.github/copilot-instructions.md .github/copilot-instructions.md
+python3 -m pip install /path/to/flowtrim
+```
+
+This gives Copilot the FlowTrim lane policy while keeping exact evidence,
+privacy, and benchmark claims constrained.
+
+### Manual Skill Install
+
+If your agent supports `SKILL.md` directories but uses a different skill root,
+copy the skill folder manually:
+
+```bash
+mkdir -p <AGENT_SKILLS_DIR>
+cp -R skills/flowtrim <AGENT_SKILLS_DIR>/flowtrim
+```
+
+Minimum manual install contents:
+
+- `skills/flowtrim/SKILL.md`
+- `skills/flowtrim/references/lane-policy.md`
+- `skills/flowtrim/references/benchmark-gates.md`
+- `skills/flowtrim/references/safety-rules.md`
+- `<skill>/scripts/flowtrim_benchmark.py`
+- `<skill>/scripts/flowtrim_orchestrator.py`
+
+Run a smoke check after installing:
+
+```bash
+flowtrim-benchmark doctor --format json
+```
+
 ## Safety Rules
 
 - No RTK hooks, Headroom proxy/wrap, MCP registration, memory, or shell config changes by default.
@@ -24,7 +145,7 @@ must not claim global wins over RTK, Ponytail, or Headroom.
 
 ## Benchmark Lab
 
-FlowTrim includes six benchmark profiles:
+FlowTrim includes seven benchmark profiles:
 
 - `synthetic-heavy`: public-safe fixtures covering command output, long context, exact evidence, code-generation pressure, and adversarial checks.
 - `public-playground-readonly`: public-safe onboarding scenarios that require no private repos and no network clone.
@@ -33,6 +154,12 @@ FlowTrim includes six benchmark profiles:
 - `work-code-readonly`: read-only code-lens analysis for private Work repos. Reports use anonymous repo/file labels plus hashes and aggregate metrics only; raw code, repo names, and local paths must not appear in JSON.
   It selects high-signal files for stress testing, so aggregate delete-list and LOC-delta numbers are not average prevalence estimates.
 - `work-commit-history-readonly`: read-only private Work commit-history analysis. It uses anonymous repo/commit/file aliases and aggregate churn only; repo names, commit messages, file paths, raw diffs, and source bodies must not appear in reports.
+- `work-dogfood-readonly`: read-only private Work dogfood profile for ticket/group-shaped commit-history proof. It uses anonymous repo/group/commit aliases and aggregate-only evidence; group selectors and ticket IDs are used locally but must not appear in reports.
+
+Private Work profiles distinguish a repo that was dirty before the run from a
+repo changed by the run. Pre-existing dirty status is represented only by
+booleans and hashes; wins are blocked only when post-run status differs from
+pre-run status.
 
 FlowTrim's first native challenger is `flowtrim-native-command`, a clean-room
 command-output packetizer. RTK remains an optional baseline/backend: FlowTrim may
@@ -64,6 +191,7 @@ flowtrim-benchmark release-check --report /tmp/flowtrim-public-baseline.json --u
 flowtrim-benchmark suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
 flowtrim-benchmark suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
 flowtrim-benchmark suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
+flowtrim-benchmark suite --profile work-dogfood-readonly --format json --work-repo <WORK_REPO_A> --work-group <TICKET_OR_GROUP>
 ```
 
 ## Source-Checkout Fallback
@@ -142,6 +270,7 @@ flowtrim-benchmark release-check --report /tmp/flowtrim-public-baseline.json --u
 flowtrim-benchmark suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
 flowtrim-benchmark suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
 flowtrim-benchmark suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
+flowtrim-benchmark suite --profile work-dogfood-readonly --format json --work-repo <WORK_REPO_A> --work-group <TICKET_OR_GROUP>
 python3 - <<'PY'
 from pathlib import Path
 from flowtrim.privacy import scan_text

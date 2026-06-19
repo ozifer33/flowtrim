@@ -241,6 +241,28 @@ class BenchmarkSuiteTest(unittest.TestCase):
         self.assertNotIn("const repeated", text)
         self.assertIn("work-code/repo-01/file-01", {case["case_id"] for case in data["cases"]})
 
+    def test_work_code_readonly_allows_preexisting_dirty_repo_without_blocking_lens(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_root = Path(tmpdir)
+            repo = create_work_repo(work_root)
+            (repo / "untracked-private-note.txt").write_text("dirty", encoding="utf-8")
+
+            report = run_suite(
+                "work-code-readonly",
+                FIXTURES_ROOT,
+                work_root=work_root,
+                repo_limit=1,
+                files_per_repo=1,
+            )
+            text = report_to_json(report)
+            data = json.loads(text)
+
+        self.assertFalse(report.runtime_changes.unapproved_filesystem_writes)
+        self.assertTrue(report.runtime_changes.preexisting_dirty_worktree)
+        self.assertFalse(report.runtime_changes.post_status_changed)
+        self.assertGreaterEqual(data["metric_totals"]["code-lens"]["wins"], 1)
+        self.assertNotIn("untracked-private-note", text)
+
     def test_work_code_readonly_builder_limits_repos_and_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             work_root = Path(tmpdir)

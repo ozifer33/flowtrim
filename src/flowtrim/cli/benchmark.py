@@ -10,6 +10,7 @@ from flowtrim.benchmark import (
     DEFAULT_WORK_HISTORY_FILES_PER_COMMIT,
     PUBLIC_PLAYGROUND_PROFILE,
     WORK_COMMIT_HISTORY_PROFILE,
+    WORK_DOGFOOD_PROFILE,
     report_to_json,
     run_suite,
 )
@@ -310,6 +311,7 @@ def main(argv: list[str] | None = None) -> int:
                 "aql-vault-readonly",
                 "work-code-readonly",
                 WORK_COMMIT_HISTORY_PROFILE,
+                WORK_DOGFOOD_PROFILE,
                 PUBLIC_OPEN_SOURCE_PROFILE,
                 PUBLIC_PLAYGROUND_PROFILE,
             ),
@@ -319,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--aql-root")
         parser.add_argument("--work-root")
         parser.add_argument("--work-repo", action="append", default=[])
+        parser.add_argument("--work-group", action="append", default=[])
         parser.add_argument("--public-corpus-manifest", default=str(DEFAULT_PUBLIC_CORPUS_MANIFEST))
         parser.add_argument("--public-cache-root", default=str(DEFAULT_PUBLIC_CACHE_ROOT))
         parser.add_argument("--headroom-executable")
@@ -334,8 +337,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--write-report", action="store_true")
         args = parser.parse_args(argv)
 
-        if args.profile == WORK_COMMIT_HISTORY_PROFILE and not args.work_repo:
-            parser.error("work-commit-history-readonly requires at least one --work-repo")
+        if args.profile in (WORK_COMMIT_HISTORY_PROFILE, WORK_DOGFOOD_PROFILE) and not args.work_repo:
+            parser.error(f"{args.profile} requires at least one --work-repo")
 
         report = run_suite(
             args.profile,
@@ -349,6 +352,7 @@ def main(argv: list[str] | None = None) -> int:
             commit_limit=args.commit_limit,
             files_per_commit=args.files_per_commit,
             headroom_executable=args.headroom_executable,
+            work_groups=args.work_group,
         )
         output = report_to_json(report) if args.format == "json" else report_to_markdown(report)
         if args.write_report:

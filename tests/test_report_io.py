@@ -1,5 +1,6 @@
 import json
 import unittest
+from dataclasses import replace
 
 from flowtrim.benchmark import (
     BenchmarkStatus,
@@ -32,6 +33,57 @@ class ReportIoTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "schema mismatch"):
             report_from_json(payload)
+
+    def test_report_verification_evidence_round_trips_as_aggregate_only(self):
+        original = run_suite("synthetic-heavy")
+        report = replace(
+            original,
+            verification=[
+                {
+                    "command_alias": "backend-jest-full",
+                    "status": "passed",
+                    "suite_count": 30,
+                    "test_count": 359,
+                    "duration_bucket": "under-30s",
+                },
+                {
+                    "command_alias": "referral-type-check",
+                    "status": "blocked",
+                    "blocker_reason": "external-project-type-errors",
+                },
+            ],
+        )
+
+        text = report_to_json(report)
+        data = json.loads(text)
+        parsed = report_from_json(text)
+
+        self.assertEqual(data["verification"][0]["command_alias"], "backend-jest-full")
+        self.assertEqual(data["verification"][1]["status"], "blocked")
+        self.assertEqual(parsed.verification, report.verification)
+        self.assertNotIn("src/pages", text)
+        self.assertNotIn("playwright.config.ts", text)
+
+    def test_report_verification_evidence_rejects_private_or_raw_log_text(self):
+        original = run_suite("synthetic-heavy")
+        private_path = (
+            "/" + "Users" + "/example/"
+            + "Documents" + "/" + "Work"
+            + "/private-repo/src/file.ts"
+        )
+        report = replace(
+            original,
+            verification=[
+                {
+                    "command_alias": "unsafe-log",
+                    "status": "failed",
+                    "blocker_reason": private_path,
+                }
+            ],
+        )
+
+        with self.assertRaisesRegex(ValueError, "unsafe verification"):
+            report_to_json(report)
 
 
 if __name__ == "__main__":

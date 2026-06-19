@@ -625,6 +625,7 @@ class BenchmarkGateTest(unittest.TestCase):
                 "tools",
                 "upgrade_backlog",
                 "vault_verdict",
+                "verification",
             ],
         )
         self.assertEqual(data["schema"], "flowtrim-benchmark/v1")

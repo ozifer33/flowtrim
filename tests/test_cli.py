@@ -156,6 +156,43 @@ class CliTest(unittest.TestCase):
         self.assertNotIn("private_feature", result.stdout)
         self.assertNotIn("normalizePrivateFixtureValue", result.stdout)
 
+    def test_suite_cli_with_work_dogfood_group_does_not_expose_repo_details(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work_root = Path(tmpdir)
+            repo = create_history_repo(
+                work_root,
+                "private-ruejai-backend-admin",
+                "ts",
+                code_message="RJ-735 private dogfood commit message must not leak",
+            )
+
+            result = run_cli(
+                "suite",
+                "--profile",
+                "work-dogfood-readonly",
+                "--format",
+                "json",
+                "--work-repo",
+                str(repo),
+                "--work-group",
+                "RJ-735",
+                "--commit-limit",
+                "4",
+                "--files-per-commit",
+                "1",
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["profile"], "work-dogfood-readonly")
+        self.assertIn("work-dogfood/repo-01/group-01/commit-001/code-01", result.stdout)
+        self.assertNotIn(str(work_root), result.stdout)
+        self.assertNotIn("private-ruejai-backend-admin", result.stdout)
+        self.assertNotIn("RJ-735", result.stdout)
+        self.assertNotIn("private dogfood commit message", result.stdout)
+        self.assertNotIn("private_feature", result.stdout)
+        self.assertNotIn("normalizePrivateFixtureValue", result.stdout)
+
     def test_suite_cli_work_markdown_omits_repo_file_names_and_source_lines(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             work_root = Path(tmpdir)

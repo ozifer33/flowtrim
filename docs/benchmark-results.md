@@ -202,6 +202,8 @@ Interpretation: this supports the private claim that FlowTrim can identify
 code-complexity reduction opportunities in Work code without changing repos. It
 does not support a public benchmark claim and does not prove Ponytail saved
 tokens, because no generated-token measurement is counted in this profile.
+Pre-existing dirty worktree state is allowed when the status remains unchanged
+after the run; only post-run status changes block wins.
 
 ### Work Commit-History Read-Only
 
@@ -232,6 +234,39 @@ Interpretation: this supports the private local claim that FlowTrim can find
 command-output and code-lens opportunities in historical Work commits without
 changing repositories, while separating generated/lock-heavy commits as controls.
 It does not support public or global benchmark claims.
+
+Pre-existing dirty worktree state is represented with booleans and hashes only.
+It does not block wins unless the post-run status differs from the pre-run
+status.
+
+### Work Dogfood Read-Only
+
+The `work-dogfood-readonly` profile is private local evidence for real task or
+ticket-shaped commit-history checks. Group selectors can be supplied locally,
+but reports use only aliases such as `repo-01/group-01/commit-001`.
+
+What it tests:
+
+- Ticket/group-shaped slices of historical Work commits.
+- Command-output compaction against aggregate commit stats.
+- Exact-evidence raw selection for diff/stat-sensitive cases.
+- Code-lens wins without token-saving claims.
+- Dirty-before unchanged worktrees without treating them as runtime writes.
+
+Sanitized latest local dogfood result:
+
+- 144 cases across anonymous repo/group aliases.
+- `token-bearing`: 32 wins, 2,845 estimated tokens saved.
+- `refusal-correctness`: 32 correct raw refusals.
+- `code-lens`: 62 wins and 18 insufficient-evidence cases.
+- Runtime changes: none.
+- Verification evidence: one backend-style Jest corpus passed; one Vue/Vite
+  private Work corpus built successfully but type-check remained blocked by
+  external project errors.
+
+Interpretation: this supports private local dogfood confidence only. It does
+not support public/global benchmark claims and must not expose repo names,
+ticket IDs, commit messages, file paths, raw source, raw diffs, or raw logs.
 
 ## Acceptance Gates
 
@@ -353,6 +388,12 @@ Private Work commit-history proof:
 
 ```bash
 flowtrim-benchmark suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
+```
+
+Private Work dogfood proof:
+
+```bash
+flowtrim-benchmark suite --profile work-dogfood-readonly --format json --work-repo <WORK_REPO_A> --work-group <TICKET_OR_GROUP>
 ```
 
 Privacy scan over tracked and untracked public repo files:

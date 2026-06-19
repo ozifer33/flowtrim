@@ -33,6 +33,7 @@ WORK_CODE_WALL_TIME_BUDGET_MS = 500
 ATLAS_CONTEXT_METHOD = "atlas-context-economy"
 BASELINE_CODE_METHOD = "baseline-code"
 WORK_COMMIT_HISTORY_PROFILE = "work-commit-history-readonly"
+WORK_DOGFOOD_PROFILE = "work-dogfood-readonly"
 PUBLIC_PLAYGROUND_PROFILE = "public-playground-readonly"
 DEFAULT_WORK_HISTORY_COMMIT_LIMIT = 6
 DEFAULT_WORK_HISTORY_FILES_PER_COMMIT = 4
@@ -137,6 +138,18 @@ SAFE_PAYLOAD_KEYS = frozenset(
         "version",
     }
 )
+SAFE_VERIFICATION_KEYS = frozenset(
+    {
+        "blocker_reason",
+        "command_alias",
+        "duration_bucket",
+        "repo_alias",
+        "status",
+        "suite_count",
+        "test_count",
+    }
+)
+SAFE_VERIFICATION_STATUSES = frozenset({"passed", "failed", "blocked"})
 REQUIRED_VAULT_FAMILIES = frozenset(
     {
         "short-command",
@@ -186,6 +199,10 @@ class RuntimeChanges:
     telemetry: bool = False
     stores_raw_output: bool = False
     unapproved_filesystem_writes: bool = False
+    preexisting_dirty_worktree: bool = False
+    post_status_changed: bool = False
+    pre_status_hash: str | None = None
+    post_status_hash: str | None = None
 
     @property
     def is_none(self) -> bool:
@@ -199,6 +216,7 @@ class RuntimeChanges:
                 self.telemetry,
                 self.stores_raw_output,
                 self.unapproved_filesystem_writes,
+                self.post_status_changed,
             )
         )
 
@@ -255,6 +273,7 @@ class BenchmarkReport:
     metric_totals: dict[str, dict[str, int]]
     vault_verdict: str
     upgrade_backlog: list[str]
+    verification: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -312,6 +331,8 @@ def build_report(
     cases: list[BenchmarkCase],
     tools: list[ToolInfo],
     upgrade_backlog: list[str],
+    *,
+    verification: list[dict[str, Any]] | None = None,
 ) -> BenchmarkReport:
     evaluated_cases = [evaluate_case(case) for case in cases]
     runtime_changes = _merge_runtime_changes(case.runtime_changes for case in evaluated_cases)
@@ -327,6 +348,7 @@ def build_report(
         metric_totals=metric_totals,
         vault_verdict=vault_verdict,
         upgrade_backlog=upgrade_backlog,
+        verification=verification or [],
     )
 
 
@@ -531,6 +553,7 @@ def run_suite(
     commit_limit: int = DEFAULT_WORK_HISTORY_COMMIT_LIMIT,
     files_per_commit: int = DEFAULT_WORK_HISTORY_FILES_PER_COMMIT,
     headroom_executable: str | None = None,
+    work_groups: list[str] | tuple[str, ...] | None = None,
 ) -> BenchmarkReport:
     if profile == "synthetic-heavy":
         cases = build_synthetic_heavy_suite(fixtures_root)
@@ -545,6 +568,13 @@ def run_suite(
     elif profile == WORK_COMMIT_HISTORY_PROFILE:
         cases = build_work_commit_history_readonly_suite(
             work_repos or (),
+            commit_limit=commit_limit,
+            files_per_commit=files_per_commit,
+        )
+    elif profile == WORK_DOGFOOD_PROFILE:
+        cases = build_work_dogfood_readonly_suite(
+            work_repos or (),
+            group_selectors=work_groups or (),
             commit_limit=commit_limit,
             files_per_commit=files_per_commit,
         )
@@ -595,6 +625,41 @@ def build_public_playground_readonly_suite() -> list[BenchmarkCase]:
             *[f"INFO noise: tsc diagnostic context {index}" for index in range(35)],
         ]
     )
+    nestjs_jest_log = "\n".join(
+        [
+            "src/modules/public/referral.service.spec.ts passed",
+            "22 passed, 0 failed",
+            "keep: src/modules/public/referral.service.spec.ts",
+            "keep: ReferralService",
+            *[f"INFO noise: jest worker log {index}" for index in range(45)],
+        ]
+    )
+    vite_large_chunk_log = "\n".join(
+        [
+            "src/pages/public/ReferralCreate.vue built",
+            "(!) Some chunks are larger than 500 kB after minification.",
+            "keep: chunk-size-warning",
+            "keep: src/pages/public/ReferralCreate.vue",
+            *[f"asset public-referral-{index}.js transformed" for index in range(55)],
+        ]
+    )
+    vue_type_check_log = "\n".join(
+        [
+            "src/pages/public/ReferralCreate.vue(78,36): TypeScriptError string undefined",
+            "keep: src/pages/public/ReferralCreate.vue",
+            "keep: TypeScriptError",
+            *[f"INFO noise: vue-tsc context {index}" for index in range(40)],
+        ]
+    )
+    ticket_churn_log = "\n".join(
+        [
+            "repo-01 group-01 commit-001 bucket:code-heavy files:12 churn:640 code:620 control:20 top:.ts",
+            *[
+                f"commit-001 file-{index:03d} ext:.ts add:{index + 10} del:{index} bucket:code"
+                for index in range(30)
+            ],
+        ]
+    )
     diff_text = "\n".join(
         [
             "diff --git a/src/public_api.py b/src/public_api.py",
@@ -612,6 +677,20 @@ def build_public_playground_readonly_suite() -> list[BenchmarkCase]:
             "  return repeated;",
             "}",
         ]
+    )
+    dirty_before_case = replace(
+        _inline_command_case(
+            "public-playground/dirty-before-unchanged-command",
+            "public-playground/dirty-before-unchanged-log",
+            "public dirty-before unchanged status check passed\nkeep: dirty-before\nkeep: unchanged",
+            must_preserve=("dirty-before", "unchanged"),
+        ),
+        runtime_changes=RuntimeChanges(
+            preexisting_dirty_worktree=True,
+            post_status_changed=False,
+            pre_status_hash="publicdirty01",
+            post_status_hash="publicdirty01",
+        ),
     )
     return [
         _inline_command_case(
@@ -635,6 +714,47 @@ def build_public_playground_readonly_suite() -> list[BenchmarkCase]:
             "public-playground/typescript-log",
             ts_log,
             must_preserve=("src/types.ts", "TypeScriptError"),
+        ),
+        _inline_command_case(
+            "public-playground/nestjs-jest-command",
+            "public-playground/nestjs-jest-log",
+            nestjs_jest_log,
+            must_preserve=(
+                "src/modules/public/referral.service.spec.ts",
+                "ReferralService",
+                "22 passed",
+            ),
+        ),
+        _inline_command_case(
+            "public-playground/vite-large-chunk-command",
+            "public-playground/vite-large-chunk-log",
+            vite_large_chunk_log,
+            must_preserve=(
+                "src/pages/public/ReferralCreate.vue",
+                "chunk-size-warning",
+                "500 kB",
+            ),
+        ),
+        _inline_command_case(
+            "public-playground/vue-type-check-command",
+            "public-playground/vue-type-check-log",
+            vue_type_check_log,
+            must_preserve=("src/pages/public/ReferralCreate.vue", "TypeScriptError"),
+        ),
+        dirty_before_case,
+        _inline_command_case(
+            "public-playground/ticket-churn-command",
+            "public-playground/ticket-churn-log",
+            ticket_churn_log,
+            must_preserve=(
+                "repo-01",
+                "group-01",
+                "commit-001",
+                "bucket:code-heavy",
+                "files:12",
+                "churn:640",
+                "top:.ts",
+            ),
         ),
         _inline_command_case(
             "public-playground/small-command",
@@ -762,9 +882,7 @@ def build_work_commit_history_readonly_suite(
         pre_status = _run_readonly_git_status(repo_root)
         commits = _select_work_history_commits(repo_root, commit_limit)
         post_status = _run_readonly_git_status(repo_root)
-        runtime_changes = RuntimeChanges(
-            unapproved_filesystem_writes=bool(pre_status) or pre_status != post_status
-        )
+        runtime_changes = _private_work_runtime_changes(pre_status, post_status)
 
         commit_number = 1
         for commit in commits:
@@ -806,6 +924,107 @@ def build_work_commit_history_readonly_suite(
     return cases
 
 
+def build_work_dogfood_readonly_suite(
+    work_repos: list[str | Path] | tuple[str | Path, ...],
+    *,
+    group_selectors: list[str] | tuple[str, ...] = (),
+    commit_limit: int = DEFAULT_WORK_HISTORY_COMMIT_LIMIT,
+    files_per_commit: int = DEFAULT_WORK_HISTORY_FILES_PER_COMMIT,
+) -> list[BenchmarkCase]:
+    if commit_limit < 1 or files_per_commit < 1:
+        return []
+
+    cases: list[BenchmarkCase] = []
+    selectors = tuple(selector for selector in group_selectors if selector.strip())
+    for repo_index, repo in enumerate(work_repos, start=1):
+        repo_root = Path(repo)
+        if not repo_root.exists():
+            continue
+
+        repo_label = f"repo-{repo_index:02d}"
+        pre_status = _run_readonly_git_status(repo_root)
+        grouped_commits = _work_dogfood_grouped_commits(
+            repo_root,
+            selectors,
+            commit_limit,
+        )
+        post_status = _run_readonly_git_status(repo_root)
+        runtime_changes = _private_work_runtime_changes(pre_status, post_status)
+
+        for group_index, commits in enumerate(grouped_commits, start=1):
+            group_label = f"group-{group_index:02d}"
+            commit_number = 1
+            for commit in commits:
+                commit_label = f"commit-{commit_number:03d}"
+                commit_number += 1
+                if commit.bucket in ("code-heavy", "command-output-heavy"):
+                    cases.append(
+                        _retag_work_dogfood_case(
+                            _work_history_command_case(
+                                repo_label,
+                                commit_label,
+                                commit,
+                                runtime_changes,
+                            ),
+                            repo_label,
+                            group_label,
+                            commit_label,
+                        )
+                    )
+                    cases.append(
+                        _retag_work_dogfood_case(
+                            _work_history_exact_case(
+                                repo_label,
+                                commit_label,
+                                commit,
+                                runtime_changes,
+                            ),
+                            repo_label,
+                            group_label,
+                            commit_label,
+                        )
+                    )
+                    for file_index, stat in enumerate(
+                        _select_work_history_code_files(commit, files_per_commit),
+                        start=1,
+                    ):
+                        code_case = _work_history_code_case(
+                            repo_root,
+                            repo_label,
+                            commit_label,
+                            f"code-{file_index:02d}",
+                            commit,
+                            stat,
+                            runtime_changes,
+                        )
+                        if code_case is not None:
+                            cases.append(
+                                _retag_work_dogfood_case(
+                                    code_case,
+                                    repo_label,
+                                    group_label,
+                                    commit_label,
+                                )
+                            )
+
+                elif commit.bucket == "control":
+                    cases.append(
+                        _retag_work_dogfood_case(
+                            _work_history_control_case(
+                                repo_label,
+                                commit_label,
+                                commit,
+                                runtime_changes,
+                            ),
+                            repo_label,
+                            group_label,
+                            commit_label,
+                        )
+                    )
+
+    return cases
+
+
 def build_work_code_readonly_suite(
     work_root: str | Path,
     *,
@@ -823,9 +1042,7 @@ def build_work_code_readonly_suite(
         pre_status = _run_readonly_git_status(repo_root)
         files = _select_work_code_files(repo_root, files_per_repo)
         post_status = _run_readonly_git_status(repo_root)
-        runtime_changes = RuntimeChanges(
-            unapproved_filesystem_writes=pre_status != post_status
-        )
+        runtime_changes = _private_work_runtime_changes(pre_status, post_status)
 
         for file_index, file_path in enumerate(files, start=1):
             file_label = f"file-{file_index:02d}"
@@ -1153,6 +1370,47 @@ def _select_work_history_commits(
     commit_limit: int,
 ) -> list[WorkHistoryCommit]:
     return _select_ranked_history_commits(_work_history_commits(repo_root), commit_limit)
+
+
+def _work_dogfood_grouped_commits(
+    repo_root: Path,
+    selectors: tuple[str, ...],
+    commit_limit: int,
+) -> list[list[WorkHistoryCommit]]:
+    commits = _work_history_commits(repo_root)
+    if not selectors:
+        return [_select_ranked_history_commits(commits, commit_limit)]
+
+    subjects = _work_history_subjects(repo_root)
+    groups = []
+    for selector in selectors:
+        selector_lower = selector.lower()
+        matched = [
+            commit
+            for commit in commits
+            if selector_lower in subjects.get(commit.commit, "").lower()
+        ]
+        groups.append(_select_ranked_history_commits(matched, commit_limit))
+    return groups
+
+
+def _work_history_subjects(repo_root: Path) -> dict[str, str]:
+    output = _run_git(
+        repo_root,
+        [
+            "log",
+            "--all",
+            "--no-merges",
+            "--pretty=format:%H%x09%s",
+        ],
+        timeout=30,
+    )
+    subjects: dict[str, str] = {}
+    for line in output.splitlines():
+        commit_hash, _, subject = line.partition("\t")
+        if commit_hash:
+            subjects[commit_hash] = subject
+    return subjects
 
 
 def _select_ranked_history_commits(
@@ -1655,6 +1913,21 @@ def _public_history_control_case(
     )
 
 
+def _retag_work_dogfood_case(
+    case: BenchmarkCase,
+    repo_label: str,
+    group_label: str,
+    commit_label: str,
+) -> BenchmarkCase:
+    source_prefix = f"work-history/{repo_label}/{commit_label}"
+    target_prefix = f"work-dogfood/{repo_label}/{group_label}/{commit_label}"
+    return replace(
+        case,
+        case_id=case.case_id.replace(source_prefix, target_prefix, 1),
+        fixture=case.fixture.replace(source_prefix, target_prefix, 1),
+    )
+
+
 def _work_history_raw_text(
     repo_label: str,
     commit_label: str,
@@ -2026,6 +2299,17 @@ def _with_runtime_and_payload(
         else:
             methods.append(method)
     return replace(case, methods=methods, runtime_changes=runtime_changes)
+
+
+def _private_work_runtime_changes(pre_status: str, post_status: str) -> RuntimeChanges:
+    status_changed = pre_status != post_status
+    return RuntimeChanges(
+        unapproved_filesystem_writes=status_changed,
+        preexisting_dirty_worktree=bool(pre_status),
+        post_status_changed=status_changed,
+        pre_status_hash=_safe_hash(pre_status),
+        post_status_hash=_safe_hash(post_status),
+    )
 
 
 def _aql_readonly_audit(
@@ -2439,6 +2723,8 @@ def _code_lens_payload_has_violation(payload: Any) -> bool:
 
 def _merge_runtime_changes(changes: Any) -> RuntimeChanges:
     changes = list(changes)
+    pre_status_hashes = {change.pre_status_hash for change in changes if change.pre_status_hash}
+    post_status_hashes = {change.post_status_hash for change in changes if change.post_status_hash}
     return RuntimeChanges(
         installs=any(change.installs for change in changes),
         hooks=any(change.hooks for change in changes),
@@ -2450,7 +2736,21 @@ def _merge_runtime_changes(changes: Any) -> RuntimeChanges:
         unapproved_filesystem_writes=any(
             change.unapproved_filesystem_writes for change in changes
         ),
+        preexisting_dirty_worktree=any(
+            change.preexisting_dirty_worktree for change in changes
+        ),
+        post_status_changed=any(change.post_status_changed for change in changes),
+        pre_status_hash=_merged_hash_value(pre_status_hashes),
+        post_status_hash=_merged_hash_value(post_status_hashes),
     )
+
+
+def _merged_hash_value(values: set[str]) -> str | None:
+    if not values:
+        return None
+    if len(values) == 1:
+        return next(iter(values))
+    return "mixed"
 
 
 def _vault_verdict(
@@ -2519,6 +2819,34 @@ def _assert_safe_report_payloads(report: BenchmarkReport) -> None:
         for method in case.methods:
             if method.payload is not None:
                 _assert_safe_payload(method.payload)
+    _assert_safe_verification(report.verification)
+
+
+def _assert_safe_verification(verification: Any) -> None:
+    if not isinstance(verification, list):
+        raise ValueError("unsafe verification evidence")
+
+    for item in verification:
+        if not isinstance(item, dict):
+            raise ValueError("unsafe verification evidence")
+        for key, value in item.items():
+            if not isinstance(key, str) or key not in SAFE_VERIFICATION_KEYS:
+                raise ValueError(f"unsafe verification key: {key}")
+            if key == "status" and value not in SAFE_VERIFICATION_STATUSES:
+                raise ValueError("unsafe verification status")
+            _assert_safe_verification_value(value)
+
+
+def _assert_safe_verification_value(value: Any) -> None:
+    if isinstance(value, bool):
+        return
+    if isinstance(value, int):
+        return
+    if isinstance(value, str):
+        if "\n" in value or "\r" in value or scan_text(value):
+            raise ValueError("unsafe verification value")
+        return
+    raise ValueError("unsafe verification value")
 
 
 def _assert_safe_payload(payload: Any) -> None:

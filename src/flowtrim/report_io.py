@@ -32,6 +32,11 @@ def report_from_json(source: str | Path | dict[str, Any]) -> BenchmarkReport:
         metric_totals=data.get("metric_totals", {}),
         vault_verdict=str(data.get("vault_verdict", "")),
         upgrade_backlog=[str(item) for item in data.get("upgrade_backlog", [])],
+        verification=[
+            dict(item)
+            for item in data.get("verification", [])
+            if isinstance(item, dict)
+        ],
     )
 
 
@@ -65,6 +70,10 @@ def _runtime_changes(data: dict[str, Any]) -> RuntimeChanges:
         telemetry=bool(data.get("telemetry", False)),
         stores_raw_output=bool(data.get("stores_raw_output", False)),
         unapproved_filesystem_writes=bool(data.get("unapproved_filesystem_writes", False)),
+        preexisting_dirty_worktree=bool(data.get("preexisting_dirty_worktree", False)),
+        post_status_changed=bool(data.get("post_status_changed", False)),
+        pre_status_hash=data.get("pre_status_hash"),
+        post_status_hash=data.get("post_status_hash"),
     )
 
 
