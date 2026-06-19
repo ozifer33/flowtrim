@@ -16,7 +16,15 @@ from flowtrim.public_corpus import (
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "flowtrim" / "scripts" / "flowtrim_benchmark.py"
-REQUIRED_PUBLIC_DOCS = ("QUICKSTART.md", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md")
+REQUIRED_PUBLIC_DOCS = (
+    "QUICKSTART.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "docs/install.md",
+    "docs/assets/flowtrim-public-alpha-benchmark.svg",
+    "benchmarks/results/2026-06-19-public-alpha.md",
+)
 
 
 def run_cli(*args):
@@ -47,6 +55,35 @@ class PublicReadinessTest(unittest.TestCase):
         self.assertIn("flowtrim-benchmark", project["scripts"])
         self.assertIn("flowtrim-classify", project["scripts"])
 
+        package = ROOT / "package.json"
+        self.assertTrue(package.is_file())
+        package_data = json.loads(package.read_text(encoding="utf-8"))
+        self.assertEqual(package_data["name"], "flowtrim-skill-install")
+        self.assertIn("flowtrim-skill-install", package_data["bin"])
+
+    def test_readme_is_short_public_landing_page_with_scoreboard(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        line_count = len(readme.splitlines())
+
+        self.assertLessEqual(line_count, 150)
+        self.assertIn("docs/assets/flowtrim-public-alpha-benchmark.svg", readme)
+        self.assertIn("| Profile | Cases | Token wins | Tokens saved | Raw refusals | Code-lens wins | Claim boundary |", readme)
+        self.assertIn("docs/install.md", readme)
+        self.assertIn("No global benchmark claim", readme)
+        self.assertNotIn("flowtrim-benchmark suite --profile aql-vault-readonly", readme)
+        self.assertNotIn("flowtrim-benchmark suite --profile work-code-readonly", readme)
+
+    def test_install_docs_have_native_and_convenience_paths(self):
+        text = (ROOT / "docs" / "install.md").read_text(encoding="utf-8")
+
+        self.assertIn("/plugin marketplace add ozifer33/flowtrim", text)
+        self.assertIn("/plugin install flowtrim@flowtrim", text)
+        self.assertIn("npx github:ozifer33/flowtrim --agent codex --scope user", text)
+        self.assertIn(".agents/skills", text)
+        self.assertIn(".github/skills", text)
+        self.assertIn("convenience installer", text)
+        self.assertIn("needs verification", text)
+
     def test_docs_check_accepts_repo_docs(self):
         result = run_cli("docs-check", "--format", "json")
 
@@ -64,7 +101,9 @@ class PublicReadinessTest(unittest.TestCase):
                 encoding="utf-8",
             )
             for name in REQUIRED_PUBLIC_DOCS:
-                (root / name).write_text("# " + name + "\n", encoding="utf-8")
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# " + name + "\n", encoding="utf-8")
             skill_root = root / "skills" / "flowtrim"
             skill_root.mkdir(parents=True)
             (skill_root / "SKILL.md").write_text(

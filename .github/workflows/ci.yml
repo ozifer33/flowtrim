@@ -19,12 +19,21 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Install package
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .
           python -m pip wheel . -w /tmp/flowtrim-wheelhouse
           python -m pip install /tmp/flowtrim-wheelhouse/flowtrim-*.whl
+
+      - name: Skill installer smoke
+        run: |
+          node scripts/flowtrim-skill-install.mjs --help
+          node scripts/flowtrim-skill-install.mjs --agent codex --scope project --project /tmp/flowtrim-install-smoke --dry-run
 
       - name: Unit tests
         run: python -m unittest discover -s tests

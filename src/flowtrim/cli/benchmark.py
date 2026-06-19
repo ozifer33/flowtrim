@@ -14,6 +14,13 @@ from flowtrim.benchmark import (
     report_to_json,
     run_suite,
 )
+from flowtrim.benchmark_summary import (
+    load_summary_reports,
+    summarize_reports,
+    summary_to_json,
+    summary_to_markdown,
+    write_summary_outputs,
+)
 from flowtrim.compare import (
     compare_reports,
     compare_reports_to_json,
@@ -254,6 +261,33 @@ def main(argv: list[str] | None = None) -> int:
             compare_reports_to_json(summary)
             if args.format == "json"
             else compare_reports_to_markdown(summary)
+        )
+        print(output)
+        return 0
+
+    if argv[:1] == ["benchmark-summary"]:
+        parser = argparse.ArgumentParser(
+            description="Generate an aggregate-only FlowTrim benchmark scoreboard."
+        )
+        parser.add_argument("command")
+        parser.add_argument("--report", action="append", default=[], required=True)
+        parser.add_argument("--markdown-out")
+        parser.add_argument("--svg-out")
+        parser.add_argument("--format", choices=("json", "markdown"), default="json")
+        args = parser.parse_args(argv)
+        try:
+            payload = summarize_reports(load_summary_reports(args.report))
+            write_summary_outputs(
+                payload,
+                markdown_out=args.markdown_out,
+                svg_out=args.svg_out,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        output = (
+            summary_to_json(payload)
+            if args.format == "json"
+            else summary_to_markdown(payload)
         )
         print(output)
         return 0

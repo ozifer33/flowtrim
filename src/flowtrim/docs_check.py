@@ -14,7 +14,10 @@ REQUIRED_PUBLIC_DOCS = (
     "CONTRIBUTING.md",
     "SECURITY.md",
     "CHANGELOG.md",
+    "docs/install.md",
     "docs/benchmark-results.md",
+    "docs/assets/flowtrim-public-alpha-benchmark.svg",
+    "benchmarks/results/2026-06-19-public-alpha.md",
     "skills/flowtrim/SKILL.md",
 )
 SOURCE_FALLBACK_HEADING = "source-checkout fallback"

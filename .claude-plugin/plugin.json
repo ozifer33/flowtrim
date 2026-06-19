@@ -1,0 +1,9 @@
+{
+  "name": "flowtrim",
+  "version": "0.1.0",
+  "description": "Lane-specific context and benchmark gates for AI coding agents.",
+  "skills": [
+    "./skills/flowtrim"
+  ],
+  "strict": false
+}

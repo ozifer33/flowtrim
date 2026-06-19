@@ -1,301 +1,121 @@
 # FlowTrim
 
-FlowTrim is a private-first, public-ready Codex skill and Python benchmark harness for reducing AI agent token usage in work repositories without changing task results.
+Lane-specific context trimming for AI coding agents: reduce noisy context when
+facts can be preserved, and keep raw evidence when exact output matters.
 
-FlowTrim routes each flow through the smallest safe context path:
+FlowTrim is a public alpha candidate. It is ready for local skill install,
+public-safe proof runs, docs checks, privacy gates, and pinned-corpus
+experiments. **No global benchmark claim** is made.
 
-- use command-output reduction for noisy shell output,
-- use code-simplification pressure before generating unnecessary code,
-- use direct long-context compression only when facts remain auditable,
-- keep raw output for exact evidence, failures, short commands, and sensitive data.
+![FlowTrim public alpha benchmark](docs/assets/flowtrim-public-alpha-benchmark.svg)
 
-## Status
+## Numbers
 
-FlowTrim is a public alpha candidate. It is ready for local install, public-safe
-proof runs, docs checks, privacy gates, and pinned-corpus experiments, but it
-must not claim global wins over RTK, Ponytail, or Headroom.
+Public-safe snapshot generated from sanitized reports:
 
-## Quick Start
+| Profile | Cases | Token wins | Tokens saved | Raw refusals | Code-lens wins | Claim boundary |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `synthetic-heavy` | 14 | 4 | 528 | 3 | 2 | Public-safe fixture evidence |
+| `public-playground-readonly` | 12 | 8 | 2,826 | 2 | 1 | Public-safe usability smoke |
 
-Requires Python `3.11+`.
-
-```bash
-git clone https://github.com/ozifer33/flowtrim.git
-cd flowtrim
-python3 -m pip install -e .
-flowtrim-benchmark doctor --format json
-```
-
-Expected result: `doctor` returns `valid: true`.
+Read the full method and caveats in
+[benchmarks/results/2026-06-19-public-alpha.md](benchmarks/results/2026-06-19-public-alpha.md)
+and [docs/benchmark-results.md](docs/benchmark-results.md).
 
 ## Install
 
-FlowTrim has two install surfaces:
-
-- Python CLI entrypoints: `flowtrim-benchmark` and `flowtrim-classify`.
-- Agent instructions: the `skills/flowtrim` skill folder, plus a GitHub Copilot
-  instruction template.
-
-### Python CLI
-
-Install from a checkout:
+Install the Python CLI:
 
 ```bash
 git clone https://github.com/ozifer33/flowtrim.git
 cd flowtrim
 python3 -m pip install .
-flowtrim-benchmark "abcd"
-flowtrim-classify "npm test produced a long build log"
-```
-
-Or install editable for development:
-
-```bash
-python3 -m pip install -e .
 flowtrim-benchmark doctor --format json
 ```
 
-### Claude Code
+Install the skill for Claude Code:
 
-Claude Code can load local skills from a `skills/<name>/SKILL.md` directory.
-Install FlowTrim as a user skill:
-
-```bash
-git clone https://github.com/ozifer33/flowtrim.git
-cd flowtrim
-mkdir -p "$HOME/.claude/skills"
-cp -R skills/flowtrim "$HOME/.claude/skills/flowtrim"
+```text
+/plugin marketplace add ozifer33/flowtrim
+/plugin install flowtrim@flowtrim
 ```
 
-For a project-only install, copy the same folder into the target repo:
+Install the skill for Codex with the optional Node convenience installer:
 
 ```bash
-mkdir -p .claude/skills
-cp -R /path/to/flowtrim/skills/flowtrim .claude/skills/flowtrim
+npx github:ozifer33/flowtrim --agent codex --scope user
 ```
 
-Then ask Claude Code to use FlowTrim for noisy command output, code-generation,
-long-context, or exact-evidence decisions.
-
-### Codex
-
-Codex can load local skills from `$HOME/.agents/skills`. Install FlowTrim as a
-user skill:
+Install manually for a project:
 
 ```bash
-git clone https://github.com/ozifer33/flowtrim.git
-cd flowtrim
-mkdir -p "$HOME/.agents/skills"
-cp -R skills/flowtrim "$HOME/.agents/skills/flowtrim"
+mkdir -p .agents/skills
+cp -R /path/to/flowtrim/skills/flowtrim .agents/skills/flowtrim
 ```
 
-The CLI can be installed in the same checkout:
+More install paths, including GitHub Copilot and manual skill directories, are in
+[docs/install.md](docs/install.md).
+
+## How It Works
+
+FlowTrim routes each agent flow through the smallest safe lane:
+
+1. `command-output`: compact noisy shell logs only when paths, errors, summaries,
+   and failing test ids survive.
+2. `code-generation`: use a Ponytail-style code-complexity lens to find
+   delete-list opportunities without claiming direct token savings.
+3. `long-context`: allow direct compression only when trace ids, source ids, job
+   ids, requirements, and retrieval facts remain auditable.
+4. `exact-evidence`: keep raw output for quotes, stack traces, line-level diffs,
+   security evidence, failing validation, and explicit exact-output requests.
+
+RTK, Ponytail, and Headroom stay optional baselines. FlowTrim can compare
+against them when installed safely, but it does not claim to beat them globally.
+
+## Run Proofs
 
 ```bash
-python3 -m pip install -e .
-flowtrim-benchmark doctor --format json
-```
-
-### GitHub Copilot
-
-GitHub Copilot does not run FlowTrim as an executable skill by itself. Use the
-instruction template for repository-level guidance, and install the Python CLI
-if local benchmark commands are needed:
-
-```bash
-mkdir -p .github
-cp /path/to/flowtrim/.github/copilot-instructions.md .github/copilot-instructions.md
-python3 -m pip install /path/to/flowtrim
-```
-
-This gives Copilot the FlowTrim lane policy while keeping exact evidence,
-privacy, and benchmark claims constrained.
-
-### Manual Skill Install
-
-If your agent supports `SKILL.md` directories but uses a different skill root,
-copy the skill folder manually:
-
-```bash
-mkdir -p <AGENT_SKILLS_DIR>
-cp -R skills/flowtrim <AGENT_SKILLS_DIR>/flowtrim
-```
-
-Minimum manual install contents:
-
-- `skills/flowtrim/SKILL.md`
-- `skills/flowtrim/references/lane-policy.md`
-- `skills/flowtrim/references/benchmark-gates.md`
-- `skills/flowtrim/references/safety-rules.md`
-- `<skill>/scripts/flowtrim_benchmark.py`
-- `<skill>/scripts/flowtrim_orchestrator.py`
-
-Run a smoke check after installing:
-
-```bash
-flowtrim-benchmark doctor --format json
-```
-
-## Safety Rules
-
-- No RTK hooks, Headroom proxy/wrap, MCP registration, memory, or shell config changes by default.
-- No private logs, secrets, production traces, customer data, `.env` values, or Work repo names in this repo.
-- No token-saving claim counts unless preservation and wall-time gates pass.
-- Generated reports stay local in `benchmarks/reports/` unless a sanitized report is explicitly reviewed for publication.
-
-## Benchmark Lab
-
-FlowTrim includes seven benchmark profiles:
-
-- `synthetic-heavy`: public-safe fixtures covering command output, long context, exact evidence, code-generation pressure, and adversarial checks.
-- `public-playground-readonly`: public-safe onboarding scenarios that require no private repos and no network clone.
-- `public-open-source-readonly`: pinned public open-source commit-history corpus. It uses public repos prepared into a local cache, then runs read-only against aliases and aggregate stats only.
-- `aql-vault-readonly`: read-only Aql Atlas decision fixtures. The expected default verdict is `hybrid-only`, because Atlas packet, `llm_brief`, source summaries, and generated indexes remain the semantic vault context economy.
-- `work-code-readonly`: read-only code-lens analysis for private Work repos. Reports use anonymous repo/file labels plus hashes and aggregate metrics only; raw code, repo names, and local paths must not appear in JSON.
-  It selects high-signal files for stress testing, so aggregate delete-list and LOC-delta numbers are not average prevalence estimates.
-- `work-commit-history-readonly`: read-only private Work commit-history analysis. It uses anonymous repo/commit/file aliases and aggregate churn only; repo names, commit messages, file paths, raw diffs, and source bodies must not appear in reports.
-- `work-dogfood-readonly`: read-only private Work dogfood profile for ticket/group-shaped commit-history proof. It uses anonymous repo/group/commit aliases and aggregate-only evidence; group selectors and ticket IDs are used locally but must not appear in reports.
-
-Private Work profiles distinguish a repo that was dirty before the run from a
-repo changed by the run. Pre-existing dirty status is represented only by
-booleans and hashes; wins are blocked only when post-run status differs from
-pre-run status.
-
-FlowTrim's first native challenger is `flowtrim-native-command`, a clean-room
-command-output packetizer. RTK remains an optional baseline/backend: FlowTrim may
-select RTK when it wins safely, but native command output can become selected
-when it preserves required facts and beats both raw and RTK in the measured case.
-Headroom is optional: FlowTrim only tests direct read-only compression when a
-safe direct runner is available. It never enables `headroom wrap`, proxy, MCP,
-memory, learning, or config writes as part of the benchmark.
-
-The Work profile defaults to a `9 x 12` high-signal sample: nine repositories and
-twelve code files per repository. Use smaller limits only for quick local smoke
-checks.
-
-Run:
-
-```bash
-python3 -m pip install -e .
 flowtrim-benchmark suite --profile synthetic-heavy --format json
 flowtrim-benchmark suite --profile public-playground-readonly --format json
 flowtrim-benchmark docs-check --format json
-flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json
+flowtrim-benchmark privacy-scan --tracked --format json
 flowtrim-benchmark doctor --format json
+```
+
+Pinned public-corpus proof is available after preparing a local cache:
+
+```bash
 flowtrim-benchmark public-corpus prepare --manifest benchmarks/public-corpus/manifest.v1.json --cache-root /tmp/flowtrim-public-corpus
-flowtrim-benchmark suite --profile public-open-source-readonly --format json --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus
-flowtrim-benchmark compare --baseline-report /tmp/flowtrim-public-baseline.json --candidate-report /tmp/flowtrim-public-headroom.json --focus headroom-direct --format markdown
-flowtrim-benchmark claim-check --report /tmp/flowtrim-public-baseline.json --claim "On the pinned public corpus, FlowTrim selected a safe lower-token method for measured lanes." --format json
-flowtrim-benchmark privacy-scan --tracked --path /tmp/flowtrim-public-baseline.json --format json
-flowtrim-benchmark release-check --report /tmp/flowtrim-public-baseline.json --unit-tests-passed --skill-validation-passed --benchmark-smoke-passed --privacy-scan-passed --sanitized-report-present --package-entrypoint-ready --license-reviewed --tool-versions-captured --format markdown
-flowtrim-benchmark suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
-flowtrim-benchmark suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
-flowtrim-benchmark suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
-flowtrim-benchmark suite --profile work-dogfood-readonly --format json --work-repo <WORK_REPO_A> --work-group <TICKET_OR_GROUP>
+flowtrim-benchmark suite --profile public-open-source-readonly --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus --format json
+```
+
+## Safety
+
+- No private Work evidence is used as a public benchmark.
+- No report may contain private paths, repo names, commit messages, source lines,
+  raw diffs, `.env` values, or secret-like text.
+- No token win counts unless preservation, runtime, and wall-time gates pass.
+- Headroom skipped or unavailable is neutral, not a loss.
+- Atlas remains the vault baseline while the vault verdict is `hybrid-only`.
+
+## Development
+
+```bash
+python3 -m pip install -e .
+python3 -m unittest discover -s tests
+flowtrim-benchmark doctor --format json
 ```
 
 ## Source-Checkout Fallback
 
-Before installing editable package:
+Before installing the package:
 
 ```bash
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py "abcd"
-PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_orchestrator.py "npm test produced a long build log"
+PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py abcd
 ```
 
-Allowed claims are lane-specific: FlowTrim may say it selected a safe lower-token method for a measured lane, or that it correctly chose raw when compression was unsafe, slower, or not cheaper. It must not claim that it globally beats RTK, Ponytail, or Headroom. Headroom is reported as skipped when unavailable, not as a loss. Ponytail-style results are complexity-reduction evidence, not direct token compression unless generated text size is measured separately.
-
-The public alpha gates are command-line checks with release-friendly exit codes:
-`claim-check` returns non-zero for overclaims, `privacy-scan` returns non-zero
-when findings exist, and `release-check` returns non-zero while required
-evidence is missing. Gate outputs are aggregate-only and do not print report
-paths, cache roots, source text, or raw diffs.
-`doctor` runs the public readiness smoke checks as one aggregate, read-only
-health check.
-
-## Proof Test Matrix
-
-The acceptance suite in `tests/test_proof_matrix.py` locks the proof plan:
-
-- noisy command output may count as a token win only when required facts survive,
-- exact evidence, failing traces, line diffs, and unsafe marker-only context must
-  select raw or `insufficient-evidence`,
-- Headroom unavailable is a skipped neutral method,
-- Ponytail-style results are code-complexity evidence, not token savings,
-- Aql vault semantic cases defer to Atlas context economy and keep the verdict
-  `hybrid-only`,
-- Work reports stay anonymous and aggregate-only.
-
-Public comparison claims are limited to the pinned public corpus and measured
-lanes. Private Work measurements remain local evidence only. FlowTrim still must
-not claim global wins over RTK, Ponytail, or Headroom.
-
-The private commit-history profile can support only local/private claim language:
-"private local evidence from historical Work commits" and "generated/lock-heavy
-commits are separated as controls." It cannot support public or global benchmark
-claims.
-
-For a detailed, public-safe explanation of the latest proof run, including what
-each profile tests, acceptance gates, result totals, and claim boundaries, see
-`docs/benchmark-results.md`.
-
-Run the proof matrix directly:
-
-```bash
-python3 -m unittest tests.test_proof_matrix
-```
-
-## Local Verification
-
-Run:
-
-```bash
-python3 -m unittest discover -s tests
-uv run --no-project --with PyYAML python <SKILL_CREATOR_QUICK_VALIDATE> skills/flowtrim
-python3 -m pip install -e .
-flowtrim-classify "npm test produced a long build log"
-flowtrim-benchmark "abcd"
-flowtrim-benchmark suite --profile synthetic-heavy --format json
-flowtrim-benchmark suite --profile public-playground-readonly --format json
-flowtrim-benchmark docs-check --format json
-flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json
-flowtrim-benchmark doctor --format json
-flowtrim-benchmark public-corpus prepare --manifest benchmarks/public-corpus/manifest.v1.json --cache-root /tmp/flowtrim-public-corpus
-flowtrim-benchmark suite --profile public-open-source-readonly --format json --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus
-HOME=/tmp/flowtrim-headroom-home XDG_CACHE_HOME=/tmp/flowtrim-headroom-cache HEADROOM_TELEMETRY=off uv run --no-project --with headroom-ai --with-editable . python -m flowtrim.cli.benchmark suite --profile public-open-source-readonly --format json --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus
-flowtrim-benchmark compare --baseline-report /tmp/flowtrim-public-baseline.json --candidate-report /tmp/flowtrim-public-headroom.json --focus headroom-direct --format markdown
-flowtrim-benchmark claim-check --report /tmp/flowtrim-public-baseline.json --claim "On the pinned public corpus, FlowTrim selected a safe lower-token method for measured lanes." --format json
-flowtrim-benchmark privacy-scan --tracked --path /tmp/flowtrim-public-baseline.json --format json
-flowtrim-benchmark release-check --report /tmp/flowtrim-public-baseline.json --unit-tests-passed --skill-validation-passed --benchmark-smoke-passed --privacy-scan-passed --sanitized-report-present --package-entrypoint-ready --license-reviewed --tool-versions-captured --format markdown
-flowtrim-benchmark suite --profile aql-vault-readonly --format json --aql-root <AQL_ATLAS_ROOT>
-flowtrim-benchmark suite --profile work-code-readonly --format json --work-root <WORK_ROOT> --repo-limit 9 --files-per-repo 12
-flowtrim-benchmark suite --profile work-commit-history-readonly --format json --work-repo <WORK_REPO_A> --work-repo <WORK_REPO_B>
-flowtrim-benchmark suite --profile work-dogfood-readonly --format json --work-repo <WORK_REPO_A> --work-group <TICKET_OR_GROUP>
-python3 - <<'PY'
-from pathlib import Path
-from flowtrim.privacy import scan_text
-bad = []
-for path in Path('.').rglob('*'):
-    if (
-        path.is_file()
-        and '.git' not in path.parts
-        and '__pycache__' not in path.parts
-        and path.suffix != '.pyc'
-        and not ('benchmarks' in path.parts and 'reports' in path.parts)
-    ):
-        findings = scan_text(path.read_text(errors='ignore'))
-        if findings:
-            bad.append((path.as_posix(), findings))
-print(bad)
-raise SystemExit(1 if bad else 0)
-PY
-```
-
-Expected:
-
-- all tests pass,
-- skill validation passes,
-- classifier prints `command-output`,
-- benchmark prints `1`,
-- benchmark suites print privacy-safe JSON,
-- privacy scan prints `[]`.
+Contributing, security, and release hygiene:
+[QUICKSTART.md](QUICKSTART.md),
+[CONTRIBUTING.md](CONTRIBUTING.md),
+[SECURITY.md](SECURITY.md),
+[CHANGELOG.md](CHANGELOG.md).

@@ -1,0 +1,22 @@
+{
+  "name": "flowtrim-skill-install",
+  "version": "0.1.0",
+  "description": "Install the FlowTrim agent skill into supported AI coding assistants.",
+  "license": "MIT",
+  "bin": {
+    "flowtrim-skill-install": "scripts/flowtrim-skill-install.mjs"
+  },
+  "files": [
+    "skills/flowtrim",
+    "scripts/flowtrim-skill-install.mjs",
+    "scripts/install-skill.sh",
+    "scripts/install-skill.ps1",
+    ".claude-plugin",
+    "README.md",
+    "docs/install.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=12"
+  }
+}

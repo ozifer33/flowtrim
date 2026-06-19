@@ -27,7 +27,7 @@ Tool posture:
 | Profile | Corpus type | Cases | Main result | Claim status |
 | --- | --- | ---: | --- | --- |
 | `synthetic-heavy` | Public-safe synthetic fixtures | 14 | 4 measured token-bearing wins, 528 estimated tokens saved, 3 correct raw refusals, 2 code-lens wins | Publishable as fixture evidence |
-| `public-playground-readonly` | Public-safe onboarding scenarios | 7 | Covers noisy logs, exact diff refusal, generated control, code lens, and short raw selection | Publishable as usability smoke evidence |
+| `public-playground-readonly` | Public-safe onboarding scenarios | 12 | 8 measured token-bearing wins, 2,826 estimated tokens saved, 2 correct raw refusals, 1 code-lens win | Publishable as usability smoke evidence |
 | `public-open-source-readonly` | Pinned public open-source commits | 114 | 22 measured token-bearing wins, 2,412 estimated tokens saved, 22 correct raw refusals, 62 code-lens wins | Publishable only as pinned-corpus evidence |
 | `aql-vault-readonly` | Read-only vault decision fixtures | 6 | Vault verdict stayed `hybrid-only`; 4 semantic cases deferred to Atlas context economy | Supports keeping Atlas as vault baseline |
 | `work-code-readonly` | Private local anonymous code sample | 84 | 84 code-lens wins, 0 token-bearing claims | Private local evidence only |
@@ -35,6 +35,8 @@ Tool posture:
 
 These totals are lane-specific. A win in one lane does not imply FlowTrim should
 replace raw output, Atlas context economy, RTK, Ponytail, or Headroom globally.
+The public README scoreboard is generated from sanitized reports and saved at
+`benchmarks/results/2026-06-19-public-alpha.md`.
 
 ## What Was Tested
 
@@ -115,10 +117,21 @@ Scenarios tested:
 - Python pytest failure log.
 - npm/Vite noisy build pass.
 - TypeScript type error.
+- NestJS/Jest command output.
+- Vite large-chunk build warning.
+- Vue/TypeScript type-check command output.
+- Dirty-before unchanged repo gate.
+- Ticket-like commit churn synthetic repo.
 - Git diff/stat exact-evidence refusal.
 - Generated or lock-style control output.
 - Small command where raw must win.
 - Code-lens duplicate abstraction case.
+
+Public playground totals:
+
+- `token-bearing`: 9 cases, 8 wins, 2,826 estimated tokens saved.
+- `refusal-correctness`: 2 cases, 2 correct refusals.
+- `code-lens`: 1 case, 1 win.
 
 Interpretation: this profile proves onboarding ergonomics and report hygiene. It
 does not replace the pinned public corpus and does not support global benchmark

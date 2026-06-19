@@ -14,6 +14,7 @@ from tests.test_public_corpus import create_public_history_repo, write_manifest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "flowtrim" / "scripts" / "flowtrim_benchmark.py"
 ORCHESTRATOR_SCRIPT = ROOT / "skills" / "flowtrim" / "scripts" / "flowtrim_orchestrator.py"
+NODE_INSTALLER = ROOT / "scripts" / "flowtrim-skill-install.mjs"
 
 
 def run_cli(*args):
@@ -35,6 +36,19 @@ def run_module(module: str, *args):
         capture_output=True,
         text=True,
         env={"PYTHONPATH": "src"},
+    )
+
+
+def run_node_installer(*args):
+    node = shutil.which("node")
+    if node is None:
+        raise unittest.SkipTest("node is not available")
+    return subprocess.run(
+        [node, str(NODE_INSTALLER), *args],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -85,6 +99,136 @@ class CliTest(unittest.TestCase):
         self.assertEqual(data["schema"], "flowtrim-benchmark/v1")
         self.assertEqual(data["profile"], "synthetic-heavy")
         self.assertNotIn("/".join(("", "Users", "")), result.stdout)
+
+    def test_benchmark_summary_generates_public_safe_markdown_and_svg(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            synthetic = tmp / "synthetic.json"
+            playground = tmp / "playground.json"
+            markdown = tmp / "public-alpha.md"
+            svg = tmp / "public-alpha.svg"
+
+            synthetic.write_text(
+                run_cli("suite", "--profile", "synthetic-heavy", "--format", "json").stdout,
+                encoding="utf-8",
+            )
+            playground.write_text(
+                run_cli(
+                    "suite",
+                    "--profile",
+                    "public-playground-readonly",
+                    "--format",
+                    "json",
+                ).stdout,
+                encoding="utf-8",
+            )
+
+            result = run_cli(
+                "benchmark-summary",
+                "--report",
+                str(synthetic),
+                "--report",
+                str(playground),
+                "--markdown-out",
+                str(markdown),
+                "--svg-out",
+                str(svg),
+                "--format",
+                "json",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["schema"], "flowtrim-benchmark-summary/v1")
+            self.assertEqual(payload["profile_count"], 2)
+            self.assertTrue(markdown.exists())
+            self.assertTrue(svg.exists())
+            markdown_text = markdown.read_text(encoding="utf-8")
+            svg_text = svg.read_text(encoding="utf-8")
+            self.assertIn("| Profile | Cases | Token wins | Tokens saved | Raw refusals | Code-lens wins | Claim boundary |", markdown_text)
+            self.assertIn("synthetic-heavy", markdown_text)
+            self.assertIn("public-playground-readonly", markdown_text)
+            self.assertIn("<svg", svg_text)
+            self.assertIn("FlowTrim public alpha benchmark", svg_text)
+            self.assertNotIn(str(tmp), result.stdout + markdown_text + svg_text)
+            self.assertNotIn("/Users/", result.stdout + markdown_text + svg_text)
+            self.assertNotIn("Headroom lost", markdown_text)
+
+    def test_benchmark_summary_rejects_unreadable_report_without_path_leak(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing = Path(tmpdir) / "missing.json"
+
+            result = run_cli(
+                "benchmark-summary",
+                "--report",
+                str(missing),
+                "--format",
+                "json",
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("report unreadable", result.stderr)
+        self.assertNotIn(str(missing), result.stderr)
+
+    def test_node_installer_dry_run_force_and_unknown_agent(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project = Path(tmpdir) / "project"
+            project.mkdir()
+
+            dry = run_node_installer(
+                "--agent",
+                "codex",
+                "--scope",
+                "project",
+                "--project",
+                str(project),
+                "--dry-run",
+            )
+            self.assertEqual(dry.returncode, 0, dry.stderr)
+            self.assertIn(".agents/skills/flowtrim", dry.stdout)
+            self.assertFalse((project / ".agents" / "skills" / "flowtrim").exists())
+
+            installed = run_node_installer(
+                "--agent",
+                "codex",
+                "--scope",
+                "project",
+                "--project",
+                str(project),
+            )
+            self.assertEqual(installed.returncode, 0, installed.stderr)
+            target = project / ".agents" / "skills" / "flowtrim"
+            self.assertTrue((target / "SKILL.md").exists())
+            self.assertTrue((target / "references" / "lane-policy.md").exists())
+            self.assertTrue((target / "scripts" / "flowtrim_benchmark.py").exists())
+            self.assertFalse((target / ".git").exists())
+            self.assertFalse((target / ".env").exists())
+
+            refused = run_node_installer(
+                "--agent",
+                "codex",
+                "--scope",
+                "project",
+                "--project",
+                str(project),
+            )
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("--force", refused.stderr)
+
+            forced = run_node_installer(
+                "--agent",
+                "codex",
+                "--scope",
+                "project",
+                "--project",
+                str(project),
+                "--force",
+            )
+            self.assertEqual(forced.returncode, 0, forced.stderr)
+
+            unknown = run_node_installer("--agent", "unknown-agent", "--scope", "user")
+            self.assertNotEqual(unknown.returncode, 0)
+            self.assertIn("unsupported agent", unknown.stderr)
 
     def test_suite_cli_with_aql_root_does_not_expose_root_path(self):
         result = run_cli(

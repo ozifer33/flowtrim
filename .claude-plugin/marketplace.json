@@ -1,0 +1,13 @@
+{
+  "name": "flowtrim",
+  "owner": {
+    "name": "Atichart"
+  },
+  "plugins": [
+    {
+      "name": "flowtrim",
+      "description": "Lane-specific context and benchmark gates for AI coding agents.",
+      "source": "."
+    }
+  ]
+}
