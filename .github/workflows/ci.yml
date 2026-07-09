@@ -42,6 +42,8 @@ jobs:
         run: |
           test "$(flowtrim-benchmark abcd)" = "1"
           test "$(flowtrim-classify "npm test produced a long build log")" = "command-output"
+          flowtrim-trim --file benchmarks/fixtures/logs/noisy-build-fail.txt --must-preserve "src/worker.py::test_retry_policy" --quiet | grep -q "src/worker.py::test_retry_policy"
+          flowtrim-run --quiet -- python -c 'print("BUILD START demo"); [print(f"INFO noise: chunk {i:03d} completed") for i in range(30)]; print("SUMMARY keep: 12 passed, 0 failed")' | grep -q "status: pass"
 
       - name: Synthetic benchmark smoke
         run: |

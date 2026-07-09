@@ -8,7 +8,11 @@ paths, source lines, or raw diffs.
 
 ## Latest Proof Run
 
-Local run date: June 18, 2026.
+Local run date: June 18, 2026. The two public-safe profiles
+(`synthetic-heavy` and `public-playground-readonly`) were re-run on
+July 9, 2026 after the measured native packet was unified with the shipped
+`flowtrim-trim` CLI packet; private and pinned-corpus rows below still describe
+the June 18 run.
 
 Report schema: `flowtrim-benchmark/v1`.
 
@@ -26,8 +30,8 @@ Tool posture:
 
 | Profile | Corpus type | Cases | Main result | Claim status |
 | --- | --- | ---: | --- | --- |
-| `synthetic-heavy` | Public-safe synthetic fixtures | 14 | 4 measured token-bearing wins, 528 estimated tokens saved, 3 correct raw refusals, 2 code-lens wins | Publishable as fixture evidence |
-| `public-playground-readonly` | Public-safe onboarding scenarios | 12 | 8 measured token-bearing wins, 2,826 estimated tokens saved, 2 correct raw refusals, 1 code-lens win | Publishable as usability smoke evidence |
+| `synthetic-heavy` | Public-safe synthetic fixtures | 14 | 4 measured token-bearing wins, 521 estimated tokens saved, 3 correct raw refusals, 2 code-lens wins | Publishable as fixture evidence |
+| `public-playground-readonly` | Public-safe onboarding scenarios | 12 | 8 measured token-bearing wins, 2,824 estimated tokens saved, 2 correct raw refusals, 1 code-lens win | Publishable as usability smoke evidence |
 | `public-open-source-readonly` | Pinned public open-source commits | 114 | 22 measured token-bearing wins, 2,412 estimated tokens saved, 22 correct raw refusals, 62 code-lens wins | Publishable only as pinned-corpus evidence |
 | `aql-vault-readonly` | Read-only vault decision fixtures | 6 | Vault verdict stayed `hybrid-only`; 4 semantic cases deferred to Atlas context economy | Supports keeping Atlas as vault baseline |
 | `work-code-readonly` | Private local anonymous code sample | 84 | 84 code-lens wins, 0 token-bearing claims | Private local evidence only |
@@ -49,7 +53,12 @@ where it must refuse.
 Native command-output comparison is the first implementation stage of the final
 direction. The noisy command fixtures compare raw, RTK fixture replay, and
 `flowtrim-native-command`; wins count only when required facts survive and the
-native packet is smaller within budget.
+selected candidate is smaller within budget. The measured
+`flowtrim-native-command` text is the same fact packet the `flowtrim-trim` CLI
+ships. Because that packet keeps failing tests, error lines, summaries, and
+file paths, the minimal RTK fixture replay currently wins the two noisy
+fixtures on token count; the win still requires every preserved fact to
+survive.
 
 Command-output cases tested:
 
@@ -98,7 +107,7 @@ loss. It is not a direct token-saving claim.
 
 Synthetic totals:
 
-- `token-bearing`: 9 cases, 4 wins, 528 estimated tokens saved, 3
+- `token-bearing`: 9 cases, 4 wins, 521 estimated tokens saved, 3
   `insufficient-evidence`, 2 skipped methods.
 - `refusal-correctness`: 3 cases, 3 correct refusals.
 - `code-lens`: 2 cases, 2 wins, 6 delete items, 3 duplicate abstractions, 6
@@ -129,7 +138,7 @@ Scenarios tested:
 
 Public playground totals:
 
-- `token-bearing`: 9 cases, 8 wins, 2,826 estimated tokens saved.
+- `token-bearing`: 9 cases, 8 wins, 2,824 estimated tokens saved.
 - `refusal-correctness`: 2 cases, 2 correct refusals.
 - `code-lens`: 1 case, 1 win.
 

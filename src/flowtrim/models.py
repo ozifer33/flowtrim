@@ -32,15 +32,3 @@ class MethodResult:
     @property
     def valid(self) -> bool:
         return self.guard_passed
-
-
-@dataclass(frozen=True)
-class LaneTask:
-    lane: Lane
-    name: str
-    read_set: frozenset[str]
-    write_set: frozenset[str] = field(default_factory=frozenset)
-
-    @property
-    def read_only(self) -> bool:
-        return not self.write_set

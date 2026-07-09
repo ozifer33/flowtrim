@@ -30,6 +30,9 @@ classifiers = [
   "Topic :: Software Development :: Quality Assurance",
 ]
 
+[project.optional-dependencies]
+tokens = ["tiktoken>=0.5"]
+
 [project.urls]
 Homepage = "https://github.com/ozifer33/flowtrim"
 Repository = "https://github.com/ozifer33/flowtrim"
@@ -38,6 +41,8 @@ Repository = "https://github.com/ozifer33/flowtrim"
 [project.scripts]
 flowtrim-benchmark = "flowtrim.cli.benchmark:main"
 flowtrim-classify = "flowtrim.cli.orchestrator:main"
+flowtrim-run = "flowtrim.cli.run:main"
+flowtrim-trim = "flowtrim.cli.trim:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

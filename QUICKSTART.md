@@ -23,6 +23,27 @@ Expected output:
 - `flowtrim-benchmark abcd` prints `1`.
 - `flowtrim-classify ...` prints `command-output`.
 
+## Trim Real Output
+
+Run a command with trimmed output (exit code is preserved):
+
+```bash
+flowtrim-run -- python3 -m pytest -q
+```
+
+Or reduce a noisy log you already captured while keeping required facts, with
+raw fallback when any gate fails:
+
+```bash
+flowtrim-trim --file benchmarks/fixtures/logs/noisy-build-fail.txt --must-preserve "src/worker.py::test_retry_policy"
+```
+
+The packet goes to stdout; a stats line such as
+`flowtrim-trim: trimmed 155 -> 63 tokens (59.4% saved)` goes to stderr. Add
+`--format json` to capture the full decision as evidence, or
+`--fallback excerpt` to keep a bounded head/tail/error excerpt when the packet
+gates fail.
+
 ## Run Public-Safe Proofs
 
 These commands require no private repositories and no network clone:

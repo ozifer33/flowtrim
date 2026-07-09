@@ -43,6 +43,28 @@ class ClassifierSelectorTest(unittest.TestCase):
 
         self.assertIn(Lane.COMMAND_OUTPUT, lanes)
 
+    def test_failed_run_summary_is_command_output_not_exact(self):
+        lanes = classify_text("summarize the failed run for me")
+
+        self.assertEqual(lanes[0], Lane.COMMAND_OUTPUT)
+        self.assertNotIn(Lane.EXACT_EVIDENCE, lanes)
+
+    def test_word_boundaries_prevent_substring_misfires(self):
+        lanes = classify_text("summarize the code review findings")
+
+        self.assertNotIn(Lane.COMMAND_OUTPUT, lanes)
+        self.assertEqual(lanes, (Lane.REPO_CONTEXT,))
+
+    def test_thai_test_failure_task_is_command_output(self):
+        lanes = classify_text("สรุปผลเทสต์ที่พังให้หน่อย")
+
+        self.assertEqual(lanes[0], Lane.COMMAND_OUTPUT)
+
+    def test_thai_raw_output_request_is_exact_evidence(self):
+        lanes = classify_text("ขอผลลัพธ์ดิบทุกบรรทัด ห้ามย่อ")
+
+        self.assertEqual(lanes[0], Lane.EXACT_EVIDENCE)
+
     def test_select_prefers_valid_lower_token_result_over_raw_for_command_output(self):
         raw = result("raw", Lane.COMMAND_OUTPUT, 100)
         compact = result("summary", Lane.COMMAND_OUTPUT, 25)

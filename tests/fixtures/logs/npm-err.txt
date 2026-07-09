@@ -1,0 +1,19 @@
+npm WARN config legacy peer deps enabled
+npm ERR! code ERESOLVE
+npm ERR! ERESOLVE unable to resolve dependency tree
+npm ERR!
+npm ERR! While resolving: storefront@2.3.1
+npm ERR! Found: react@17.0.2
+npm ERR! node_modules/react
+npm ERR!   react@"^17.0.2" from the root project
+npm ERR!
+npm ERR! Could not resolve dependency:
+npm ERR! peer react@"^18.2.0" from react-router@6.22.0
+npm ERR! node_modules/react-router
+npm ERR!   react-router@"6.22.0" from the root project
+npm ERR!
+npm ERR! Fix the upstream dependency conflict, or retry
+npm ERR! this command with --force or --legacy-peer-deps
+npm ERR! to accept an incorrect (and potentially broken) dependency resolution.
+npm ERR!
+npm ERR! A complete log of this run can be found in: ~/.npm/_logs/debug-0.log

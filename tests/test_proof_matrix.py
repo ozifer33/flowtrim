@@ -15,15 +15,17 @@ FIXTURES_ROOT = ROOT / "benchmarks" / "fixtures"
 
 SYNTHETIC_EXPECTATIONS = {
     "command-output/short-empty": ("raw", "raw", "raw-short-output", False),
+    # The shipped flowtrim-native packet is now measured as-is (richer than the
+    # minimal RTK fixture replay), so RTK replay wins these fixtures on tokens.
     "command-output/noisy-build-pass": (
-        "flowtrim-native-command",
-        "flowtrim-native-command",
+        "rtk",
+        "rtk",
         "lower-token-safe",
         True,
     ),
     "command-output/noisy-build-fail": (
-        "flowtrim-native-command",
-        "flowtrim-native-command",
+        "rtk",
+        "rtk",
         "lower-token-safe",
         True,
     ),

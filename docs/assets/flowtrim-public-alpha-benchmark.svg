@@ -8,8 +8,8 @@
 <text x="32" y="145" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" fill="#172554">synthetic-heavy</text>
 <text x="32" y="165" font-family="Inter, Arial, sans-serif" font-size="12" fill="#475569">14 cases - 3 raw refusals</text>
 <rect x="250" y="130" width="300" height="18" rx="4" fill="#e2e8f0"/>
-<rect x="250" y="130" width="56" height="18" rx="4" fill="#0f766e"/>
-<text x="562" y="145" font-family="Inter, Arial, sans-serif" font-size="13" fill="#172554">528</text>
+<rect x="250" y="130" width="55" height="18" rx="4" fill="#0f766e"/>
+<text x="562" y="145" font-family="Inter, Arial, sans-serif" font-size="13" fill="#172554">521</text>
 <rect x="650" y="130" width="210" height="18" rx="4" fill="#e2e8f0"/>
 <rect x="650" y="130" width="210" height="18" rx="4" fill="#7c3aed"/>
 <text x="872" y="145" font-family="Inter, Arial, sans-serif" font-size="13" fill="#172554">2</text>
@@ -18,7 +18,7 @@
 <text x="32" y="219" font-family="Inter, Arial, sans-serif" font-size="12" fill="#475569">12 cases - 2 raw refusals</text>
 <rect x="250" y="184" width="300" height="18" rx="4" fill="#e2e8f0"/>
 <rect x="250" y="184" width="300" height="18" rx="4" fill="#0f766e"/>
-<text x="562" y="199" font-family="Inter, Arial, sans-serif" font-size="13" fill="#172554">2826</text>
+<text x="562" y="199" font-family="Inter, Arial, sans-serif" font-size="13" fill="#172554">2824</text>
 <rect x="650" y="184" width="210" height="18" rx="4" fill="#e2e8f0"/>
 <rect x="650" y="184" width="105" height="18" rx="4" fill="#7c3aed"/>
 <text x="872" y="199" font-family="Inter, Arial, sans-serif" font-size="13" fill="#172554">1</text>

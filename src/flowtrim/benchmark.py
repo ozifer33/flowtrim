@@ -112,6 +112,7 @@ SAFE_PAYLOAD_KEYS = frozenset(
         "delete_items",
         "duplicate_abstractions",
         "error_labels",
+        "error_lines",
         "estimated_loc_delta",
         "failing_tests",
         "generated_loc_delta",

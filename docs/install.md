@@ -4,10 +4,12 @@ Official install path: Codex.
 
 FlowTrim has two parts:
 
-- a Python CLI: `flowtrim-benchmark` and `flowtrim-classify`
+- a Python CLI: `flowtrim-run`, `flowtrim-trim`, `flowtrim-classify`, and
+  `flowtrim-benchmark`
 - a Codex skill folder: `skills/flowtrim`
 
-Use the CLI for benchmark gates. Use the skill when you want Codex to apply the
+Use `flowtrim-run` and `flowtrim-trim` for day-to-day token reduction, the
+benchmark CLI for proof gates, and the skill when you want Codex to apply the
 FlowTrim lane policy while working.
 
 ## Official Codex Install

@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.2.0, pluggy-1.5.0
+rootdir: /workspace/storefront
+configfile: pyproject.toml
+collected 24 items
+
+tests/test_billing.py ..F.....                                          [ 33%]
+tests/test_users.py ........                                            [ 66%]
+tests/test_orders.py ........                                           [100%]
+
+=================================== FAILURES ===================================
+_________________________ test_prorates_mid_cycle_change _______________________
+
+    def test_prorates_mid_cycle_change():
+>       assert prorate(1200, days_used=10) == 400
+E       AssertionError: assert 380 == 400
+
+tests/test_billing.py:57: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_billing.py::test_prorates_mid_cycle_change - AssertionError: assert 380 == 400
+========================== 1 failed, 23 passed in 1.42s ========================

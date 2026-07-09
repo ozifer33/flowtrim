@@ -136,10 +136,11 @@ class BenchmarkSuiteTest(unittest.TestCase):
                 self.assertIn("raw", methods)
                 self.assertIn("rtk", methods)
                 self.assertIn("flowtrim-native-command", methods)
-                self.assertEqual(case.selected_method, "flowtrim-native-command")
+                self.assertIn(case.selected_method, ("rtk", "flowtrim-native-command"))
+                self.assertEqual(case.decision_reason, "lower-token-safe")
                 self.assertLess(
                     methods["flowtrim-native-command"].tokens,
-                    methods["rtk"].tokens,
+                    methods["raw"].tokens,
                 )
                 self.assertTrue(methods["flowtrim-native-command"].guard_passed)
                 self.assertIn("status", methods["flowtrim-native-command"].payload)

@@ -13,35 +13,32 @@ Use FlowTrim to choose the smallest safe context path for work-repo tasks.
 2. Classify the active flow:
    - `exact-evidence`: use raw output.
    - `repo-context`: read repo rules, README, scripts, and verification recipes first.
-   - `command-output`: compare raw, measured command reduction, and deterministic reducers.
+   - `command-output`: run the command through `flowtrim-run -- <command>` (exit
+     code is the pass/fail ground truth), or pipe existing output through
+     `flowtrim-trim` with `--must-preserve` facts. Both emit a compact packet
+     only when preservation and token gates pass and keep raw evidence otherwise.
    - `code-generation`: apply simplification pressure before adding code.
-   - `long-context`: use direct compression only when facts remain auditable.
+   - `long-context`: `flowtrim-trim --lane long-context` keeps trace/source/job
+     ids, paths, and error labels auditable; raw wins when facts do not survive.
 3. Select a method only when preservation, token, and wall-time gates pass.
-4. Fall back to raw/default behavior when confidence is low.
+4. Fall back to raw/default behavior when confidence is low. `--fallback excerpt`
+   keeps a bounded head/tail/error-window excerpt instead of full raw output.
 
 ## Read When Needed
 
 - For lane details, read `references/lane-policy.md`.
 - For measurement gates, read `references/benchmark-gates.md`.
 - For unsafe cases and fallback rules, read `references/safety-rules.md`.
+- For benchmark, proof, and release-gate commands, read `references/commands.md`.
 
 ## Commands
 
+- Run a command with trimmed output: `flowtrim-run -- npm test`
+- Trim piped output (fail-safe): `npm test 2>&1 | flowtrim-trim`
+- Trim a saved log with required facts: `flowtrim-trim --file /tmp/build.log --must-preserve "src/worker.py::test_retry_policy"`
+- Inspect a trim decision with savings evidence: `flowtrim-trim --file /tmp/build.log --format json`
 - Classify a task: `flowtrim-classify "task text"`
-- Estimate fixture tokens: `flowtrim-benchmark "text"`
-- Run synthetic proof: `flowtrim-benchmark suite --profile synthetic-heavy --format json`
-- Run public playground proof: `flowtrim-benchmark suite --profile public-playground-readonly --format json`
-- Audit pinned public manifest: `flowtrim-benchmark public-corpus audit --manifest benchmarks/public-corpus/manifest.v1.json --format json`
-- Prepare pinned public corpus: `flowtrim-benchmark public-corpus prepare --manifest benchmarks/public-corpus/manifest.v1.json --cache-root /tmp/flowtrim-public-corpus`
-- Run pinned public proof: `flowtrim-benchmark suite --profile public-open-source-readonly --public-corpus-manifest benchmarks/public-corpus/manifest.v1.json --public-cache-root /tmp/flowtrim-public-corpus --format json`
-- Run private dogfood proof: `flowtrim-benchmark suite --profile work-dogfood-readonly --work-repo <WORK_REPO> --work-group <TICKET_OR_GROUP> --format json`
-- Compare Headroom proof: `flowtrim-benchmark compare --baseline-report /tmp/flowtrim-public-baseline.json --candidate-report /tmp/flowtrim-public-headroom.json --focus headroom-direct --format markdown`
-- Check a public claim: `flowtrim-benchmark claim-check --report /tmp/flowtrim-public-baseline.json --claim "On the pinned public corpus, FlowTrim selected a safe lower-token method for measured lanes." --format json`
-- Run privacy gate: `flowtrim-benchmark privacy-scan --tracked --path /tmp/flowtrim-public-baseline.json --format json`
-- Run docs gate: `flowtrim-benchmark docs-check --format json`
 - Run public readiness doctor: `flowtrim-benchmark doctor --format json`
-- Run release gate: `flowtrim-benchmark release-check --report /tmp/flowtrim-public-baseline.json --unit-tests-passed --skill-validation-passed --benchmark-smoke-passed --privacy-scan-passed --sanitized-report-present --package-entrypoint-ready --license-reviewed --tool-versions-captured --format markdown`
-- Source checkout fallback: `PYTHONPATH=src python3 skills/flowtrim/scripts/flowtrim_benchmark.py "text"`
 
 ## Do Not Use When
 

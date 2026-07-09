@@ -16,6 +16,8 @@ class PackagingTest(unittest.TestCase):
         scripts = data["project"]["scripts"]
         self.assertEqual(scripts["flowtrim-benchmark"], "flowtrim.cli.benchmark:main")
         self.assertEqual(scripts["flowtrim-classify"], "flowtrim.cli.orchestrator:main")
+        self.assertEqual(scripts["flowtrim-run"], "flowtrim.cli.run:main")
+        self.assertEqual(scripts["flowtrim-trim"], "flowtrim.cli.trim:main")
 
     def test_package_declares_benchmark_resource_data(self):
         data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))

@@ -1,0 +1,26 @@
+   Compiling pricing v0.4.2 (crates/pricing)
+   Compiling checkout v0.4.2 (crates/checkout)
+    Finished test profile [unoptimized + debuginfo] target(s) in 3.42s
+     Running unittests src/lib.rs (target/debug/deps/pricing-9f8a7b6c5d4e3f2a)
+
+running 6 tests
+test pricing::tests::applies_discount ... ok
+test pricing::tests::rejects_negative_total ... FAILED
+test pricing::tests::rounds_to_satang ... ok
+test pricing::tests::sums_line_items ... ok
+test pricing::tests::converts_currency ... ok
+test pricing::tests::caps_promo_stack ... ok
+
+failures:
+
+---- pricing::tests::rejects_negative_total stdout ----
+thread 'pricing::tests::rejects_negative_total' panicked at src/lib.rs:88:9:
+assertion `left == right` failed
+  left: -100
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+failures:
+    pricing::tests::rejects_negative_total
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
